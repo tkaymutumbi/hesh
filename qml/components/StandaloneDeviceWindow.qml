@@ -91,6 +91,22 @@ Window {
         }
     }
 
+    // A standalone device has no DeviceWorkspace, so provide the same browser
+    // shortcuts here. Ctrl+Shift+R bypasses the profile disk cache.
+    Shortcut {
+        sequence: "Ctrl+R"
+        context: Qt.ApplicationShortcut
+        enabled: root.visible && browserLoader.item !== null
+        onActivated: browserLoader.item.reloadPage(false)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+R"
+        context: Qt.ApplicationShortcut
+        enabled: root.visible && browserLoader.item !== null
+        onActivated: browserLoader.item.reloadPage(true)
+    }
+
     // Main.qml calls this before restoring the embedded host. Keeping the
     // browser Loader explicit makes the destroy-before-restore ordering clear.
     function releaseBrowserSurface() {
@@ -158,7 +174,7 @@ Window {
             device: root.device
             canGoBack: browserLoader.item ? browserLoader.item.canGoBack : false
             canGoForward: browserLoader.item ? browserLoader.item.canGoForward : false
-            onReloadRequested: if (browserLoader.item) browserLoader.item.reloadPage()
+            onReloadRequested: if (browserLoader.item) browserLoader.item.reloadPage(false)
             onBackRequested: if (browserLoader.item) browserLoader.item.goBack()
             onForwardRequested: if (browserLoader.item) browserLoader.item.goForward()
             onOpenBrowserRequested: (url) => Qt.openUrlExternally(url)

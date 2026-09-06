@@ -16,6 +16,23 @@ Item {
     property bool frameEnabled: true
     signal openStandaloneRequested(var device)
 
+    // WebEngine does not reliably receive application-level accelerators when
+    // a QML control owns focus. Keep these at the workspace level so the same
+    // browser behaviour works whether the page or the URL field is focused.
+    Shortcut {
+        sequence: "Ctrl+R"
+        context: Qt.ApplicationShortcut
+        enabled: root.visible && !root.standalone && deviceLoader.item !== null
+        onActivated: deviceLoader.item.reloadPage(false)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+R"
+        context: Qt.ApplicationShortcut
+        enabled: root.visible && !root.standalone && deviceLoader.item !== null
+        onActivated: deviceLoader.item.reloadPage(true)
+    }
+
     onDeviceChanged: {
         // A Loader otherwise reuses the same DeviceFrame when selection
         // changes. Recreating it also recreates the WebEngineProfile binding,
@@ -163,6 +180,14 @@ Item {
                             urlField.focus = false
                         }
                     }
+                }
+
+                AppButton {
+                    compact: true
+                    text: "Reload"
+                    secondary: true
+                    visible: root.device !== null && !root.standalone
+                    onClicked: if (deviceLoader.item) deviceLoader.item.reloadPage(false)
                 }
 
                 AppButton {

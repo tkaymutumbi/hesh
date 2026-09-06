@@ -131,7 +131,7 @@ Item {
             if (webView) {
                 root.pageFailed = false
                 root.pageError = ""
-                webView.reload()
+                root.reloadPage(false)
             }
         }
     }
@@ -162,7 +162,24 @@ Item {
     readonly property bool canGoBack: webView.canGoBack
     readonly property bool canGoForward: webView.canGoForward
 
-    function reloadPage() { webView.reload() }
+    // Always wake the WebEngine surface before navigation. A WebEngineView
+    // can retain an old imported Wayland buffer after being covered or moved;
+    // reloading a non-active surface leaves that buffer black.
+    function reloadPage(bypassCache) {
+        if (!webView || !root.profileReady || !root.device) return
+
+        reloadTimer.stop()
+        root.pageLoaded = false
+        root.pageLoading = true
+        root.pageFailed = false
+        root.pageError = ""
+        webView.lifecycleState = WebEngineView.LifecycleState.Active
+
+        if (bypassCache && typeof webView.reloadAndBypassCache === "function")
+            webView.reloadAndBypassCache()
+        else
+            webView.reload()
+    }
     function goBack() { webView.goBack() }
     function goForward() { webView.goForward() }
     function ensureActive() {
@@ -176,7 +193,7 @@ Item {
 
         var currentUrl = webView.url.toString()
         if (currentUrl === "" || currentUrl === "about:blank") {
-            if (root.device.status === "Running") webView.reload()
+            if (root.device.status === "Running") root.reloadPage(false)
             return
         }
 
