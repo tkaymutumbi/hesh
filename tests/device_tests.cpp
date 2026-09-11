@@ -1,5 +1,8 @@
 #include <QtTest>
 
+#include <QDir>
+#include <QFile>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 
 #include "app/Settings.hpp"
@@ -16,6 +19,7 @@ class DeviceTests final : public QObject
 private slots:
     void createWebDevice();
     void removeDevice();
+    void clearDeviceData();
     void selectDevice();
     void profileAssignment();
     void persistenceRoundTrip();
@@ -57,6 +61,56 @@ void DeviceTests::removeDevice()
     manager.removeDevice(second->id());
     QCOMPARE(manager.deviceCount(), 1);
     QCOMPARE(manager.selectedDevice(), static_cast<Device*>(first));
+}
+
+void DeviceTests::clearDeviceData()
+{
+    // Keep the device storage inside the Qt test directory instead of the real
+    // application-data location.
+    QStandardPaths::setTestModeEnabled(true);
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    Settings settings(QStringLiteral("HeshTests"), QStringLiteral("ClearData"),
+                      directory.filePath(QStringLiteral("settings.ini")));
+    DeviceManager manager(&settings);
+    auto* device = manager.createWebDevice(QStringLiteral("Preview"),
+                                           QStringLiteral("Pixel 7"),
+                                           QStringLiteral("http://localhost:3000"));
+    QVERIFY(device != nullptr);
+
+    const auto* webDevice = qobject_cast<const WebDevice*>(device);
+    QVERIFY(webDevice != nullptr);
+    QVERIFY(!webDevice->persistentStoragePath().isEmpty());
+    QVERIFY(!webDevice->cachePath().isEmpty());
+
+    // Store data where Chromium would, so clearing has something to remove.
+    for (const auto& path : {webDevice->persistentStoragePath(), webDevice->cachePath()}) {
+        QDir storage(path);
+        QVERIFY(storage.mkpath(QStringLiteral(".")));
+        QFile file(storage.filePath(QStringLiteral("stored-data")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write("payload"), qint64(7));
+        file.close();
+    }
+
+    QSignalSpy clearing(device, &Device::dataClearing);
+    QSignalSpy cleared(device, &Device::dataCleared);
+
+    // An unknown device is ignored instead of wiping anything.
+    manager.clearDeviceData(QStringLiteral("missing-device"));
+    QCOMPARE(clearing.count(), 0);
+
+    manager.clearDeviceData(device->id());
+    // Hosts release their browser surface while the wipe is pending, so the
+    // directories must still be present when the first signal arrives.
+    QCOMPARE(clearing.count(), 1);
+    QVERIFY(QDir(webDevice->persistentStoragePath()).exists());
+
+    QTRY_COMPARE(cleared.count(), 1);
+    QVERIFY(!QDir(webDevice->persistentStoragePath()).exists());
+    QVERIFY(!QDir(webDevice->cachePath()).exists());
 }
 
 void DeviceTests::selectDevice()

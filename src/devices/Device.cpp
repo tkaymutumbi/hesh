@@ -1,5 +1,7 @@
 #include "Device.hpp"
 
+#include <QTimer>
+
 #include <utility>
 
 namespace Hesh {
@@ -139,6 +141,23 @@ void Device::start()
 void Device::stop()
 {
     setStatus(Status::Stopped);
+}
+
+void Device::clearData()
+{
+    emit dataClearing();
+    // Hosts release their WebEngine surface from dataClearing(); Chromium keeps
+    // the storage directory busy until its profile is destroyed. Defer the
+    // removal so the queued profile destruction is serviced first, then let
+    // hosts restore a fresh surface.
+    QTimer::singleShot(0, this, [this] {
+        clearPersistentData();
+        emit dataCleared();
+    });
+}
+
+void Device::clearPersistentData()
+{
 }
 
 } // namespace Hesh

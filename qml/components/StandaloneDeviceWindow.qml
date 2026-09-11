@@ -11,7 +11,10 @@ Window {
 
     property var device: null
     property string deviceId: ""
-    property bool browserSurfaceActive: browserLoader.active
+    // Latched off while the main window tears this host down, and while a
+    // clear-data wipe is pending.
+    property bool browserSurfaceReleased: false
+    readonly property bool browserSurfaceActive: browserLoader.active
     property bool suppressCloseSignal: false
     // Window dimensions are device-independent pixels. Use the compositor's
     // available work area (which excludes reserved bars/panels) and never
@@ -110,7 +113,7 @@ Window {
     // Main.qml calls this before restoring the embedded host. Keeping the
     // browser Loader explicit makes the destroy-before-restore ordering clear.
     function releaseBrowserSurface() {
-        browserLoader.active = false
+        root.browserSurfaceReleased = true
     }
 
     function closeForDeviceRemoval() {
@@ -132,6 +135,23 @@ Window {
         }
     }
 
+    // Clearing this device's data destroys its WebEngineProfile before the
+    // storage directories are removed. Drop the browser surface for the wipe and
+    // rebuild it afterwards so the profile and the page session are fresh.
+    Connections {
+        target: root.device
+
+        function onDataClearing() {
+            root.browserSurfaceReleased = true
+        }
+
+        function onDataCleared() {
+            Qt.callLater(function() {
+                if (root.device) root.browserSurfaceReleased = false
+            })
+        }
+    }
+
     Rectangle {
         id: surface
         anchors.fill: parent
@@ -140,7 +160,7 @@ Window {
         Loader {
             id: browserLoader
             anchors.centerIn: parent
-            active: root.device !== null
+            active: root.device !== null && !root.browserSurfaceReleased
             sourceComponent: DeviceFrame {
                 device: root.device
                 availableWidth: root.width

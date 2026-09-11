@@ -64,6 +64,7 @@ public:
                                            const QString& profileName,
                                            const QString& url);
     Q_INVOKABLE void removeDevice(const QString& id);
+    Q_INVOKABLE void clearDeviceData(const QString& id);
     Q_INVOKABLE void selectDevice(const QString& id);
     Q_INVOKABLE void startDevice(const QString& id);
     Q_INVOKABLE void stopDevice(const QString& id);

@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "devices/DeviceStorage.hpp"
+
 namespace Hesh {
 
 WebDevice::WebDevice(QString id,
@@ -39,6 +41,21 @@ void WebDevice::start()
 void WebDevice::stop()
 {
     setStatus(Status::Stopped);
+}
+
+QString WebDevice::persistentStoragePath() const
+{
+    return DeviceStorage::persistentStoragePath(id());
+}
+
+QString WebDevice::cachePath() const
+{
+    return DeviceStorage::cachePath(id());
+}
+
+void WebDevice::clearPersistentData()
+{
+    DeviceStorage::remove(id());
 }
 
 } // namespace Hesh

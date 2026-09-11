@@ -6,6 +6,7 @@ Rectangle {
 
     property string text: "Button"
     property bool secondary: false
+    property bool destructive: false
     property bool compact: false
     signal clicked()
 
@@ -15,8 +16,8 @@ Rectangle {
     color: !root.enabled
            ? Theme.panelSoft
            : mouseArea.pressed
-             ? (secondary ? Theme.borderStrong : Theme.accentStrong)
-             : (secondary ? Theme.panelRaised : Theme.accent)
+             ? (secondary ? Theme.borderStrong : (destructive ? Theme.errorStrong : Theme.accentStrong))
+             : (secondary ? Theme.panelRaised : (destructive ? Theme.error : Theme.accent))
     border.width: secondary ? 1 : 0
     border.color: Theme.borderStrong
     opacity: root.enabled ? 1.0 : 0.55

@@ -23,8 +23,11 @@ Implemented:
 - Logical viewport sizing kept separate from visual workspace scaling
 - QSettings-backed persistence for devices and selected device
 - Isolated, persistent cookies, local storage, IndexedDB, and disk cache per web device
+- Per-device **Clear Data** action behind a confirmation dialog: wipes that
+  device's cookies, local storage, IndexedDB, and cached files, then reloads
+  the preview with a fresh session
 - Hardware-accelerated preview rendering with responsive loading and error states
-- Core Qt Test coverage for creation, removal, selection, profiles, and persistence
+- Core Qt Test coverage for creation, removal, clearing, selection, profiles, and persistence
 
 Not implemented yet:
 

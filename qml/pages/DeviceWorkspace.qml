@@ -10,7 +10,13 @@ Item {
 
     property var device: null
     property var manager
-    readonly property bool compact: width < 760
+    // Toolbar density. The metric labels and the inline action buttons each
+    // need room next to the URL field; below these widths they collapse
+    // instead of squeezing the field and pushing the last button off-screen.
+    // At the default window size the workspace is ~990px, which still fits the
+    // metric labels.
+    readonly property bool showMetrics: width >= 950
+    readonly property bool inlineActions: width >= 740
     property bool showDevTools: false
     property bool standalone: false
     property bool frameEnabled: true
@@ -60,6 +66,33 @@ Item {
         if (!root.standalone && !root.frameEnabled) {
             root.frameEnabled = true
         }
+    }
+
+    // Clearing a device's data destroys its WebEngineProfile before the storage
+    // directories are removed, and the same profile path cannot be reopened
+    // until that profile is gone. Release the frame for the wipe, then rebuild
+    // it so the profile and the page session are fresh.
+    Connections {
+        target: root.device
+
+        function onDataClearing() {
+            root.frameEnabled = false
+        }
+
+        function onDataCleared() {
+            Qt.callLater(function() { root.frameEnabled = true })
+        }
+    }
+
+    DeviceToolbarMenu {
+        id: toolbarMenu
+        device: root.device
+        standalone: root.standalone
+        showDevTools: root.showDevTools
+        canReload: root.device !== null && !root.standalone && deviceLoader.item !== null
+        onReloadRequested: if (deviceLoader.item) deviceLoader.item.reloadPage(false)
+        onDevToolsToggled: root.showDevTools = !root.showDevTools
+        onOpenStandaloneRequested: root.openStandaloneRequested(root.device)
     }
 
     ColumnLayout {
@@ -186,7 +219,7 @@ Item {
                     compact: true
                     text: "Reload"
                     secondary: true
-                    visible: root.device !== null && !root.standalone
+                    visible: root.device !== null && !root.standalone && root.inlineActions
                     onClicked: if (deviceLoader.item) deviceLoader.item.reloadPage(false)
                 }
 
@@ -194,7 +227,7 @@ Item {
                     compact: true
                     text: root.showDevTools ? "Hide DevTools" : "DevTools"
                     secondary: true
-                    visible: !root.standalone
+                    visible: !root.standalone && root.inlineActions
                     onClicked: root.showDevTools = !root.showDevTools
                 }
 
@@ -202,12 +235,20 @@ Item {
                     compact: true
                     text: root.standalone ? "Focus Window" : "Open in Window"
                     secondary: root.standalone
-                    visible: root.device !== null
+                    visible: root.device !== null && root.inlineActions
                     onClicked: root.openStandaloneRequested(root.device)
                 }
 
+                IconButton {
+                    id: overflowButton
+                    visible: !root.inlineActions
+                    iconText: "⋯"
+                    tooltip: "More actions"
+                    onClicked: toolbarMenu.openAt(overflowButton)
+                }
+
                 Text {
-                    visible: !root.compact
+                    visible: root.showMetrics
                     text: root.device ? root.device.viewportWidth + " × " + root.device.viewportHeight : ""
                     color: Theme.text
                     font.pixelSize: 11
@@ -215,21 +256,21 @@ Item {
                 }
 
                 Text {
-                    visible: !root.compact
+                    visible: root.showMetrics
                     text: root.device ? "DPR " + Number(root.device.devicePixelRatio).toFixed(2) : ""
                     color: Theme.textMuted
                     font.pixelSize: 11
                 }
 
                 Text {
-                    visible: !root.compact
+                    visible: root.showMetrics
                     text: deviceLoader.item ? deviceLoader.item.presentationMode : "Fit"
                     color: Theme.textMuted
                     font.pixelSize: 11
                 }
 
                 Text {
-                    visible: !root.compact
+                    visible: root.showMetrics
                     text: deviceLoader.item ? deviceLoader.item.presentationPercent + "%" : ""
                     color: Theme.accent
                     font.pixelSize: 11

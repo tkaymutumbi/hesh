@@ -16,6 +16,7 @@ Item {
     property bool standalone: false
     signal activated()
     signal openStandaloneRequested(var device)
+    signal clearDataRequested(var device)
     signal deviceRemovalRequested(string deviceId)
 
     implicitHeight: 76
@@ -116,6 +117,7 @@ Item {
         device: root.device
         standalone: root.standalone
         onOpenStandaloneRequested: (selectedDevice) => root.openStandaloneRequested(selectedDevice)
+        onClearDataRequested: (selectedDevice) => root.clearDataRequested(selectedDevice)
         onDeviceRemovalRequested: (removedDeviceId) => root.deviceRemovalRequested(removedDeviceId)
     }
 }

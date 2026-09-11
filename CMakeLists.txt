@@ -30,6 +30,8 @@ qt_add_library(hesh_core STATIC
     src/devices/DeviceManager.hpp
     src/devices/DeviceProfile.cpp
     src/devices/DeviceProfile.hpp
+    src/devices/DeviceStorage.cpp
+    src/devices/DeviceStorage.hpp
     src/web/WebDevice.cpp
     src/web/WebDevice.hpp
 )
@@ -73,10 +75,12 @@ qt_add_qml_module(hesh
         qml/components/StandaloneContextMenu.qml
         qml/components/DeviceContextMenu.qml
         qml/components/DeviceListItem.qml
+        qml/components/DeviceToolbarMenu.qml
         qml/components/EmptyState.qml
         qml/components/IconButton.qml
         qml/components/Sidebar.qml
         qml/components/StatusBadge.qml
+        qml/dialogs/ClearDeviceDataDialog.qml
         qml/dialogs/CreateDeviceDialog.qml
         qml/pages/DeviceWorkspace.qml
         qml/theme/Theme.qml

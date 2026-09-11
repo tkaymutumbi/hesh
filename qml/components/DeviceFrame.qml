@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Shapes
-import QtCore
 import QtWebEngine
 import Hesh 1.0
 
@@ -40,13 +39,6 @@ Item {
     property real effectiveBezel: root.bezel * root.presentationScale
     property real effectiveRadius: root.screenRadius * root.presentationScale
     property real profileDpr: root.device ? root.device.devicePixelRatio : 1.0
-
-    function localPath(location) {
-        // StandardPaths returns a URL in QML, while WebEngineProfile expects a
-        // native filesystem path. Passing the URL verbatim creates a literal
-        // "file:" directory relative to the process working directory.
-        return decodeURIComponent(location.toString().replace(/^file:\/\//, ""))
-    }
 
     function syncDevicePixelRatio() {
         if (!root.profileReady || !root.device || webView.url.toString() === "about:blank")
@@ -251,14 +243,10 @@ Item {
     WebEngineProfilePrototype {
         id: deviceProfile
         storageName: root.device ? "hesh-device-" + root.device.id : "hesh-device-preview"
-        persistentStoragePath: root.device
-            ? root.localPath(StandardPaths.writableLocation(StandardPaths.AppDataLocation))
-              + "/web-devices/" + root.device.id
-            : ""
-        cachePath: root.device
-            ? root.localPath(StandardPaths.writableLocation(StandardPaths.CacheLocation))
-              + "/web-devices/" + root.device.id
-            : ""
+        // The device owns the storage layout, so the profile and the
+        // clear-data operation can never disagree about the directories.
+        persistentStoragePath: root.device ? root.device.persistentStoragePath : ""
+        cachePath: root.device ? root.device.cachePath : ""
         httpCacheType: WebEngineProfile.DiskHttpCache
         persistentCookiesPolicy: WebEngineProfile.ForcePersistentCookies
     }
@@ -267,6 +255,14 @@ Item {
         // Assign after construction; assigning instance() through a binding
         // during WebEngineView creation can crash Qt WebEngine on Wayland.
         var profile = deviceProfile.instance()
+        if (!profile) {
+            // The prototype refuses to build a profile while another live
+            // profile still owns the same data path. Keep the placeholder
+            // instead of attaching a null profile to the view.
+            console.warn("Hesh could not create a WebEngine profile for device",
+                         root.device ? root.device.id : "<none>")
+            return
+        }
         if (root.device && root.device.userAgent) {
             profile.httpUserAgent = root.device.userAgent
         }

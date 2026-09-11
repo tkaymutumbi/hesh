@@ -11,6 +11,7 @@ Rectangle {
     property var standaloneDeviceIds: ({})
     signal addDeviceRequested()
     signal openStandaloneRequested(var device)
+    signal clearDataRequested(var device)
     signal deviceRemovalRequested(string deviceId)
     color: Theme.panel
     border.width: 1
@@ -61,6 +62,7 @@ Rectangle {
                           && root.manager.selectedDevice.id === deviceId
                 onActivated: if (root.manager) root.manager.selectDevice(deviceId)
                 onOpenStandaloneRequested: (selectedDevice) => root.openStandaloneRequested(selectedDevice)
+                onClearDataRequested: (selectedDevice) => root.clearDataRequested(selectedDevice)
                 onDeviceRemovalRequested: (removedDeviceId) => root.deviceRemovalRequested(removedDeviceId)
             }
 

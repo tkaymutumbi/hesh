@@ -11,8 +11,10 @@ Popup {
     focus: true
     closePolicy: Popup.CloseOnEscape
     anchors.centerIn: Overlay.overlay
-    width: 560
-    height: 530
+    // Stay inside the window on narrow workspaces instead of clipping the
+    // fields and the action buttons.
+    width: Math.min(560, (Overlay.overlay ? Overlay.overlay.width : 560) - 40)
+    height: Math.min(530, (Overlay.overlay ? Overlay.overlay.height : 530) - 40)
     padding: 0
 
     Overlay.modal: Rectangle { color: "#99080a0e" }

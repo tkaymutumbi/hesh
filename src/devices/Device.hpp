@@ -61,11 +61,26 @@ public:
     virtual void start();
     virtual void stop();
 
+    // Wipes the device's persistent runtime data (for a web device: cookies,
+    // local storage, IndexedDB, and caches). Presentation hosts release their
+    // browser surface when dataClearing() is emitted, the data is removed on
+    // the next event-loop turn, and hosts may restore the surface when
+    // dataCleared() arrives.
+    void clearData();
+
 signals:
     void nameChanged();
     void statusChanged();
     void profileChanged();
     void dataChanged();
+    // Emitted before and after clearData() removes the persistent data.
+    void dataClearing();
+    void dataCleared();
+
+protected:
+    // Removes the data that clearData() targets. Subclasses that own storage
+    // override this; the base device keeps nothing on disk.
+    virtual void clearPersistentData();
 
 private:
     QString m_id;

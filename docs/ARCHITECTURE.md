@@ -37,6 +37,15 @@ directory. QML converts `StandardPaths` URLs to native filesystem paths before
 passing them to WebEngine; passing a `file://` URL to those string properties
 would incorrectly create a relative `file:` directory.
 
+Clearing a device's browser data is driven by `Device::clearData()`. Because
+Chromium keeps the storage directories busy while a profile is alive, the
+sequence is: emit `dataClearing()` so the presentation host releases its
+`WebEngineProfile`; remove the storage directories on the next event-loop turn;
+emit `dataCleared()` so the host rebuilds a fresh surface and page session.
+`DeviceStorage` is the single source of the on-disk layout: `WebDevice` exposes
+both directories and `DeviceFrame` binds its profile to them, so the profile
+that writes the data and the operation that wipes it can never disagree.
+
 ## Device model
 
 `Device` contains identity, type, lifecycle status, and display profile data.

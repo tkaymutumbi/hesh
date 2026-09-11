@@ -164,6 +164,13 @@ void DeviceManager::removeDevice(const QString& id)
     persist();
 }
 
+void DeviceManager::clearDeviceData(const QString& id)
+{
+    if (auto* device = findById(id)) {
+        device->clearData();
+    }
+}
+
 void DeviceManager::selectDevice(const QString& id)
 {
     setSelectedDevice(findById(id));

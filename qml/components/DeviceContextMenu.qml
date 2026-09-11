@@ -13,6 +13,7 @@ Popup {
     property var device
     property bool standalone: false
     signal openStandaloneRequested(var device)
+    signal clearDataRequested(var device)
     signal deviceRemovalRequested(string deviceId)
 
     parent: Overlay.overlay
@@ -126,6 +127,33 @@ Popup {
                 onClicked: {
                     root.close()
                     root.openStandaloneRequested(root.device)
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 36
+            radius: 5
+            color: clearMouse.containsMouse ? Theme.panelSoft : "transparent"
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Clear Data"
+                color: Theme.warning
+                font.pixelSize: 12
+            }
+
+            MouseArea {
+                id: clearMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    root.close()
+                    root.clearDataRequested(root.device)
                 }
             }
         }

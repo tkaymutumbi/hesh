@@ -95,6 +95,12 @@ ApplicationWindow {
         setDetached(deviceId, false)
     }
 
+    function requestClearData(device) {
+        if (!device) return
+        clearDataDialog.device = device
+        clearDataDialog.open()
+    }
+
     function openStandaloneForDevice(device) {
         if (!device || !device.id) return
         var deviceId = device.id
@@ -288,6 +294,7 @@ ApplicationWindow {
                     onAddDeviceRequested: createDeviceDialog.open()
                     standaloneDeviceIds: window.detachedDeviceIds
                     onOpenStandaloneRequested: (device) => window.openStandaloneForDevice(device)
+                    onClearDataRequested: (device) => window.requestClearData(device)
                     onDeviceRemovalRequested: (deviceId) => window.closeStandaloneForDevice(deviceId)
                 }
 
@@ -320,6 +327,11 @@ ApplicationWindow {
 
     CreateDeviceDialog {
         id: createDeviceDialog
+        manager: deviceManager
+    }
+
+    ClearDeviceDataDialog {
+        id: clearDataDialog
         manager: deviceManager
     }
 
