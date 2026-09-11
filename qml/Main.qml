@@ -129,7 +129,7 @@ ApplicationWindow {
                 window.standaloneWindows[deviceId].focusWindow()
                 return
             }
-            var host = standaloneWindowComponent.createObject(null, { device: device })
+            var host = standaloneWindowComponent.createObject(null, { device: device, manager: deviceManager })
             if (!host) {
                 setDetached(deviceId, false)
                 return

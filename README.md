@@ -26,7 +26,9 @@ Implemented:
 - Per-device **Clear Data** action behind a confirmation dialog: wipes that
   device's cookies, local storage, IndexedDB, and cached files, then reloads
   the preview with a fresh session
-- Hardware-accelerated preview rendering with responsive loading and error states
+- Hardware-accelerated preview rendering with explicit preview states: animated
+  loading with progress, classified connection errors with retry, and a stopped
+  state that can start the device again
 - Core Qt Test coverage for creation, removal, clearing, selection, profiles, and persistence
 
 Not implemented yet:

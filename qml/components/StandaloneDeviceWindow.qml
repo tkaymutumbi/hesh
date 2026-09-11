@@ -10,6 +10,7 @@ Window {
     id: root
 
     property var device: null
+    property var manager: null
     property string deviceId: ""
     // Latched off while the main window tears this host down, and while a
     // clear-data wipe is pending.
@@ -163,6 +164,7 @@ Window {
             active: root.device !== null && !root.browserSurfaceReleased
             sourceComponent: DeviceFrame {
                 device: root.device
+                manager: root.manager
                 availableWidth: root.width
                 availableHeight: root.height
                 bezel: 0

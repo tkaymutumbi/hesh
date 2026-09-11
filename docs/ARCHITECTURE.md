@@ -76,6 +76,39 @@ state is driven by both navigation status and load progress so a rendered page
 is revealed promptly, including development servers whose final navigation
 notification can arrive late.
 
+## Preview states
+
+`DeviceFrame` shows exactly one of four preview states, derived from the device
+status and the WebEngine load state:
+
+```text
+stopped   ── start ──▶ loading ── rendered ──▶ ready
+                          │                      │
+                          └── load failed ──▶ error ── retry ──▶ loading
+```
+
+The state overlay is opaque and covers the `WebEngineView` in every state but
+`ready`, so a stopped, failed, or still-loading device can never show a black
+surface. Its text renders at unscaled pixel sizes while its content width
+follows the device screen, so a scaled-down preview shrinks the state instead
+of clipping the progress bar.
+
+- `loading` animates a spinner, names the target URL, and reveals a determinate
+  progress bar once Chromium reports progress. A load that reports no progress
+  for four seconds says it is still waiting, which covers a connection that
+  black-holes instead of refusing. When the load succeeds the overlay holds the
+  completed bar for a beat before revealing the page, so progress is never seen
+  stopping short of the end.
+- `error` classifies the raw Chromium code (`net::ERR_…`) into a plain-language
+  title and explanation — offline, DNS, refused, timeout, certificate, HTTP
+  status — keeps the raw code as secondary detail, and offers Retry.
+- `stopped` explains that the device is not running and offers Start Device
+  through `DeviceManager`, so a stopped preview cannot be mistaken for a slow
+  one. Reloading a stopped device is a no-op: the frame never enters `loading`
+  without a navigation, because the device URL binding is pinned to
+  `about:blank` whenever the device is not running.
+- Only a render process crash retries on its own.
+
 ## Developer tools
 
 `DeviceFrame` hosts Chromium DevTools in a second `WebEngineView` whose

@@ -20,6 +20,7 @@ QtObject {
     readonly property color warning: "#efbd75"
     readonly property color error: "#ee7d86"
     readonly property color errorStrong: "#d1646d"
+    readonly property color errorSoft: "#3a2328"
     readonly property int radiusSmall: 7
     readonly property int radiusMedium: 10
     readonly property int spacing: 12

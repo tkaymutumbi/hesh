@@ -7,6 +7,9 @@ Item {
     id: root
 
     property var device: null
+    // Optional DeviceManager, used by the stopped state to start the device
+    // without leaving the frame.
+    property var manager: null
     property real availableWidth: 620
     property real availableHeight: 560
     property int bezel: 12
@@ -25,6 +28,88 @@ Item {
     property bool pageLoading: false
     property bool pageFailed: false
     property string pageError: ""
+
+    // Set when a load reports no progress for a while. A connection that
+    // black-holes never fails, so the loading state has to say it is stuck.
+    property bool slowLoad: false
+    // A finished load keeps the overlay up for one beat so the progress bar
+    // visibly completes instead of vanishing mid-fill.
+    property bool loadCompleted: false
+    readonly property bool overlayVisible: root.device !== null
+                                           && (root.frameState !== "ready" || root.loadCompleted)
+    // The device screen is a four-state machine. The state overlay below
+    // always covers the WebEngineView unless the state is "ready", so a
+    // stopped, failed, or still-loading preview can never render black.
+    readonly property string frameState: {
+        if (!root.device) return "idle"
+        if (root.device.status !== "Running") return "stopped"
+        if (root.pageFailed) return "error"
+        if (root.pageLoaded && !root.pageLoading) return "ready"
+        return "loading"
+    }
+    // Width of the device screen in the device's own visual space. It is
+    // exactly what the state overlay gets, because the screen inset and the
+    // frame scale cancel out in both hosts.
+    readonly property real screenVisualWidth: root.device
+                                              ? root.device.viewportWidth * root.presentationScale
+                                              : 0
+    // State content shrinks with a small preview. Without this the fixed
+    // column width overflows a scaled-down screen and the clipped progress
+    // bar reads as a bar that never finishes loading.
+    readonly property real stateContentWidth: Math.max(24, Math.min(288, root.screenVisualWidth - 40))
+    readonly property real progressValue: root.loadCompleted ? 100
+                                          : Math.max(0, Math.min(100, webView.loadProgress))
+    readonly property bool progressVisible: root.loadCompleted
+                                            || (root.frameState === "loading"
+                                                && webView.loadProgress > 0 && webView.loadProgress < 100)
+    readonly property color stateColor: root.frameState === "error" ? Theme.error
+                                       : root.frameState === "stopped" ? Theme.textFaint
+                                       : Theme.accent
+    // Every state shows the same slot in the same order: glyph, kicker, title,
+    // detail, target URL, progress, raw code, actions. Empty strings collapse.
+    readonly property var stateText: {
+        if (root.frameState === "stopped") {
+            return {
+                kicker: "DEVICE STOPPED",
+                title: "This device is not running",
+                detail: "Start it to load the preview again.",
+                url: root.device ? root.device.url : "",
+                code: "",
+            }
+        }
+        if (root.frameState === "error") {
+            var info = root.classifyLoadError(root.pageError)
+            return {
+                kicker: info.kicker,
+                title: info.title,
+                detail: info.detail,
+                url: root.device ? root.device.url : "",
+                code: root.pageError,
+            }
+        }
+        if (root.frameState === "loading") {
+            return {
+                kicker: "LOADING PREVIEW",
+                title: "",
+                detail: root.slowLoad ? "Still waiting on the server…" : "",
+                url: root.device ? root.device.url : "",
+                code: "",
+            }
+        }
+        return { kicker: "", title: "", detail: "", url: "", code: "" }
+    }
+
+    onFrameStateChanged: {
+        root.slowLoad = false
+        if (root.frameState === "ready") {
+            root.loadCompleted = true
+            completionTimer.restart()
+        } else {
+            completionTimer.stop()
+            root.loadCompleted = false
+        }
+    }
+
     property bool profileReady: false
     property bool showDevTools: false
     property int devToolsWidth: 420
@@ -120,12 +205,34 @@ Item {
         interval: 650
         repeat: false
         onTriggered: {
-            if (webView) {
+            // Only clear the failure when the retry can actually run. Without
+            // the profile there is no browser at all, so leaving the error
+            // state up beats flipping back to a fake loading state.
+            if (webView && root.profileReady) {
                 root.pageFailed = false
                 root.pageError = ""
                 root.reloadPage(false)
             }
         }
+    }
+
+    // A black-holed connection never reaches LoadFailedStatus, so the loading
+    // state has to admit it is waiting rather than look like a hang.
+    Timer {
+        id: slowLoadTimer
+        interval: 4000
+        repeat: false
+        running: root.frameState === "loading"
+        onTriggered: root.slowLoad = true
+    }
+
+    // Long enough for the progress fill animation to reach 100%, short enough
+    // that revealing a rendered page still feels immediate.
+    Timer {
+        id: completionTimer
+        interval: 190
+        repeat: false
+        onTriggered: root.loadCompleted = false
     }
 
     Timer {
@@ -159,6 +266,10 @@ Item {
     // reloading a non-active surface leaves that buffer black.
     function reloadPage(bypassCache) {
         if (!webView || !root.profileReady || !root.device) return
+        // A stopped device has no page to load: its URL binding is pinned to
+        // about:blank, and blank navigations are ignored below. Without this
+        // guard the frame would enter "loading" and stay there forever.
+        if (root.device.status !== "Running") return
 
         reloadTimer.stop()
         root.pageLoaded = false
@@ -172,6 +283,48 @@ Item {
         else
             webView.reload()
     }
+
+    // Turns a raw Chromium/Qt WebEngine load failure into copy a device
+    // developer can act on. The raw net:: code stays visible in the frame as
+    // secondary detail; this only decides the words around it.
+    function classifyLoadError(raw) {
+        var code = String(raw || "")
+        var text = code.toLowerCase()
+
+        if (text.indexOf("renderer crashed") >= 0)
+            return { kicker: "PREVIEW CRASHED", title: "The preview process stopped", detail: "Hesh is restarting it automatically." }
+        if (text.indexOf("webengine profile") >= 0)
+            return { kicker: "PREVIEW UNAVAILABLE", title: "The device browser is busy", detail: "Another surface still owns this device's browser data. Close the other window, then retry." }
+        if (text.indexOf("err_internet_disconnected") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "No network connection", detail: "This machine appears to be offline. Check the connection and try again." }
+        if (text.indexOf("err_name_not_resolved") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "Host not found", detail: "Hesh could not resolve that host name. Check the URL or your DNS." }
+        if (text.indexOf("err_connection_refused") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "Connection refused", detail: "Nothing is listening at that address. Is the server running?" }
+        if (text.indexOf("timed_out") >= 0 || text.indexOf("err_timed_out") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "The server timed out", detail: "That address did not respond in time." }
+        if (text.indexOf("err_connection_reset") >= 0 || text.indexOf("err_connection_closed") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "The connection dropped", detail: "The server closed the connection while the page was loading." }
+        if (text.indexOf("err_empty_response") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "Empty response", detail: "The server accepted the connection but sent no data." }
+        if (text.indexOf("err_cert") >= 0 || text.indexOf("err_ssl") >= 0 || text.indexOf("err_bad_ssl") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "Certificate rejected", detail: "Hesh refused an insecure connection to this server." }
+        if (text.indexOf("err_http_response_code_failure") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "The server returned an error", detail: "The page answered with an HTTP error status." }
+        if (text.indexOf("err_invalid_url") >= 0 || text.indexOf("err_unknown_url_scheme") >= 0 || text.indexOf("err_disallowed_url_scheme") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "Invalid address", detail: "Hesh cannot open that URL. Check the scheme and the host." }
+        if (text.indexOf("err_aborted") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "Load cancelled", detail: "The load stopped before the page finished." }
+        if (text.indexOf("err_blocked") >= 0 || text.indexOf("err_unsafe") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "Request blocked", detail: "The request was blocked before it left this machine." }
+        if (text.indexOf("err_file_not_found") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "File not found", detail: "That file is not on disk." }
+        if (text.indexOf("err_network") >= 0 || text.indexOf("err_address_unreachable") >= 0)
+            return { kicker: "CAN'T CONNECT", title: "Network unreachable", detail: "That address cannot be reached from this machine right now." }
+
+        return { kicker: "CAN'T CONNECT", title: "Unable to load preview", detail: "Hesh could not load this page. Check that the URL is running, then retry." }
+    }
+
     function goBack() { webView.goBack() }
     function goForward() { webView.goForward() }
     function ensureActive() {
@@ -258,9 +411,12 @@ Item {
         if (!profile) {
             // The prototype refuses to build a profile while another live
             // profile still owns the same data path. Keep the placeholder
-            // instead of attaching a null profile to the view.
+            // instead of attaching a null profile to the view, and say so on
+            // the screen rather than spinning forever.
             console.warn("Hesh could not create a WebEngine profile for device",
                          root.device ? root.device.id : "<none>")
+            root.pageFailed = true
+            root.pageError = "WebEngine profile unavailable"
             return
         }
         if (root.device && root.device.userAgent) {
@@ -323,20 +479,140 @@ Item {
             border.width: 0
             clip: true
 
+            // Preview state overlay. Deliberately opaque and unscaled: it
+            // covers the WebEngineView until the page has rendered, so a
+            // stopped or failed preview can never show a black surface, and
+            // the state stays legible in small standalone windows.
             Rectangle {
                 anchors.fill: parent
                 color: "#0d1014"
                 z: 1
-                visible: !root.pageLoaded
+                visible: root.overlayVisible
 
                 Column {
                     anchors.centerIn: parent
-                    spacing: 9
+                    width: root.stateContentWidth
+                    spacing: 11
+
+                    // Fixed-height glyph slot: spinner, error mark, or stopped
+                    // device outline, so the text below never jumps. It
+                    // collapses once the load is done, leaving the completed
+                    // bar centered for the hold.
+                    Item {
+                        width: parent.width
+                        height: root.loadCompleted ? 0 : 44
+
+                        Item {
+                            id: stateSpinner
+                            anchors.centerIn: parent
+                            width: 26
+                            height: 26
+                            visible: root.frameState === "loading"
+
+                            Shape {
+                                anchors.fill: parent
+                                preferredRendererType: Shape.CurveRenderer
+
+                                ShapePath {
+                                    strokeColor: Theme.border
+                                    strokeWidth: 2
+                                    fillColor: "transparent"
+                                    capStyle: ShapePath.RoundCap
+                                    PathAngleArc {
+                                        centerX: 13
+                                        centerY: 13
+                                        radiusX: 11
+                                        radiusY: 11
+                                        startAngle: 0
+                                        sweepAngle: 360
+                                    }
+                                }
+
+                                ShapePath {
+                                    strokeColor: Theme.accent
+                                    strokeWidth: 2
+                                    fillColor: "transparent"
+                                    capStyle: ShapePath.RoundCap
+                                    PathAngleArc {
+                                        centerX: 13
+                                        centerY: 13
+                                        radiusX: 11
+                                        radiusY: 11
+                                        startAngle: 0
+                                        sweepAngle: 96
+                                    }
+                                }
+                            }
+
+                            RotationAnimator on rotation {
+                                from: 0
+                                to: 360
+                                duration: 950
+                                loops: Animation.Infinite
+                                running: stateSpinner.visible
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            visible: root.frameState === "error"
+                            width: 42
+                            height: 42
+                            radius: 12
+                            color: Theme.errorSoft
+                            border.width: 1
+                            border.color: Theme.errorStrong
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "!"
+                                color: Theme.error
+                                font.pixelSize: 20
+                                font.weight: Font.DemiBold
+                            }
+                        }
+
+                        Item {
+                            anchors.centerIn: parent
+                            visible: root.frameState === "stopped"
+                            width: 24
+                            height: 38
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 5
+                                color: "transparent"
+                                border.width: 2
+                                border.color: Theme.textFaint
+                            }
+
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.topMargin: 4
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 7
+                                height: 2
+                                radius: 1
+                                color: Theme.textFaint
+                            }
+
+                            Rectangle {
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 4
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 4
+                                height: 4
+                                radius: 2
+                                color: Theme.textFaint
+                            }
+                        }
+                    }
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "WEB DEVICE"
-                        color: Theme.accent
+                        visible: text.length > 0
+                        text: root.stateText.kicker
+                        color: root.stateColor
                         font.pixelSize: 10
                         font.weight: Font.DemiBold
                         font.letterSpacing: 1.7
@@ -344,26 +620,91 @@ Item {
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: root.pageFailed ? "Unable to load preview" : (root.pageLoading ? "Loading preview…" : (root.device ? root.device.url : ""))
-                        color: Theme.textMuted
-                        font.pixelSize: 12
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        visible: text.length > 0
+                        text: root.stateText.title
+                        color: Theme.text
+                        font.pixelSize: 13
+                        font.weight: Font.Medium
                     }
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        visible: root.pageFailed
-                        text: root.pageError
-                        color: Theme.error
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        lineHeight: 1.25
+                        visible: text.length > 0
+                        text: root.stateText.detail
+                        color: Theme.textMuted
+                        font.pixelSize: 11
+                    }
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        visible: text.length > 0
+                        text: root.stateText.url
+                        color: Theme.textFaint
                         font.pixelSize: 10
                         elide: Text.ElideMiddle
                     }
 
-                    AppButton {
+                    Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        visible: root.pageFailed
-                        text: "Retry"
-                        compact: true
-                        onClicked: webView.reload()
+                        // Shorter than the text column and never wider than
+                        // the screen, so the fill can never be clipped.
+                        width: Math.min(180, parent.width)
+                        height: 3
+                        radius: 1.5
+                        color: Theme.border
+                        visible: root.progressVisible
+
+                        Rectangle {
+                            width: parent.width * root.progressValue / 100
+                            height: parent.height
+                            radius: parent.radius
+                            color: Theme.accent
+
+                            Behavior on width {
+                                NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                            }
+                        }
+                    }
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        visible: text.length > 0
+                        text: root.stateText.code
+                        color: Theme.textFaint
+                        font.pixelSize: 10
+                        elide: Text.ElideMiddle
+                    }
+
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: 10
+                        visible: root.frameState === "error"
+                                 || (root.frameState === "stopped" && !!root.manager)
+
+                        AppButton {
+                            visible: root.frameState === "error"
+                            text: "Retry"
+                            compact: true
+                            onClicked: root.reloadPage(false)
+                        }
+
+                        AppButton {
+                            visible: root.frameState === "stopped" && !!root.manager
+                            text: "Start Device"
+                            compact: true
+                            onClicked: if (root.manager && root.device) root.manager.startDevice(root.device.id)
+                        }
                     }
                 }
             }
@@ -435,7 +776,7 @@ Item {
                         root.pageLoading = false
                         root.pageLoaded = false
                         root.pageFailed = true
-                        root.pageError = loadRequest.errorString || "Check that the URL is running."
+                        root.pageError = loadRequest.errorString
                         console.info("Hesh WebDevice could not load", loadRequest.url, loadRequest.errorString)
                     }
                 }
@@ -444,7 +785,7 @@ Item {
                     root.pageLoading = false
                     root.pageLoaded = false
                     root.pageFailed = true
-                    root.pageError = "Renderer crashed (status " + terminationStatus + "). Retrying…"
+                    root.pageError = "Renderer crashed (status " + terminationStatus + ")"
                     // Active lifecycle is required to restart the renderer;
                     // Discarded/Frozen would stay black.
                     lifecycleState = WebEngineView.LifecycleState.Active

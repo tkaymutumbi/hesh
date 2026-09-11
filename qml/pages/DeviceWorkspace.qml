@@ -157,6 +157,7 @@ Item {
 
                     DeviceFrame {
                         device: root.device
+                        manager: root.manager
                         availableWidth: stage.width
                         availableHeight: stage.height
                         showDevTools: root.showDevTools
