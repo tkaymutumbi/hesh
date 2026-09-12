@@ -80,6 +80,84 @@ Popup {
             color: Theme.border
         }
 
+        // Per-device accent. Picking keeps the menu open so several presets can
+        // be compared; the sidebar card and the preview state repaint live.
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 9
+            Layout.rightMargin: 9
+            Layout.topMargin: 7
+            Layout.bottomMargin: 5
+            spacing: 4
+            visible: root.device !== null
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                Text {
+                    text: "ACCENT"
+                    color: Theme.textFaint
+                    font.pixelSize: 10
+                    font.weight: Font.DemiBold
+                    font.letterSpacing: 1.2
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Text {
+                    text: root.device && root.device.hasAccent ? root.device.accentName : "App"
+                    color: Theme.textMuted
+                    font.pixelSize: 10
+                }
+            }
+
+            AccentPicker {
+                Layout.topMargin: 2
+                current: root.device && root.device.hasAccent ? root.device.accentName : ""
+                swatchWidth: 26
+                swatchHeight: 22
+                swatchSpacing: 6
+                onPicked: (name) => {
+                    if (root.manager) root.manager.setDeviceAccent(root.deviceId, name)
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.topMargin: 1
+                Layout.preferredHeight: 26
+                radius: 5
+                visible: root.device !== null && root.device.hasAccent
+                color: inheritMouse.containsMouse ? Theme.panelSoft : "transparent"
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Follow App Accent"
+                    color: Theme.textMuted
+                    font.pixelSize: 11
+                }
+
+                MouseArea {
+                    id: inheritMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (root.manager) root.manager.setDeviceAccent(root.deviceId, "")
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            color: Theme.border
+        }
+
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 36

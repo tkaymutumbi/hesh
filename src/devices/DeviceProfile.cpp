@@ -61,6 +61,7 @@ QJsonObject deviceRecordToJson(const DeviceRecord& record)
         {QStringLiteral("type"), record.type},
         {QStringLiteral("profile"), record.profileName},
         {QStringLiteral("url"), record.url},
+        {QStringLiteral("accent"), record.accent},
     };
 }
 
@@ -78,6 +79,9 @@ std::optional<DeviceRecord> deviceRecordFromJson(const QJsonObject& object)
     record.type = object.value(QStringLiteral("type")).toString(QStringLiteral("web"));
     record.profileName = object.value(QStringLiteral("profile")).toString(QStringLiteral("Pixel 7"));
     record.url = object.value(QStringLiteral("url")).toString(QStringLiteral("http://localhost:3000"));
+    // Records written before per-device accents existed have no accent key, and
+    // an empty accent means the device follows the application accent.
+    record.accent = object.value(QStringLiteral("accent")).toString();
     return record;
 }
 

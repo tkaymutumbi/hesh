@@ -2,6 +2,7 @@
 
 #include <QObject>
 
+#include "Preferences.hpp"
 #include "Settings.hpp"
 #include "devices/DeviceManager.hpp"
 
@@ -16,9 +17,11 @@ public:
     explicit Application(QObject* parent = nullptr);
 
     DeviceManager* deviceManager();
+    Preferences* preferences();
 
 private:
     Settings m_settings;
+    Preferences m_preferences;
     DeviceManager m_deviceManager;
 };
 

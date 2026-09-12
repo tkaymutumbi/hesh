@@ -14,6 +14,13 @@ Item {
     property var manager
     property bool selected: false
     property bool standalone: false
+    // A device accent overrides the application accent for this card. The
+    // device model stores "no accent" as an empty name and never reads
+    // application preferences, so the fallback is resolved here.
+    readonly property bool useDeviceAccent: root.device !== null && root.device.hasAccent
+    readonly property color accentColor: root.useDeviceAccent ? root.device.accent : Theme.accent
+    readonly property color accentSoftColor: root.useDeviceAccent ? root.device.accentSoft : Theme.accentSoft
+    readonly property color accentBorderColor: root.useDeviceAccent ? root.device.accentBorder : Theme.accentBorder
     signal activated()
     signal openStandaloneRequested(var device)
     signal clearDataRequested(var device)
@@ -28,9 +35,10 @@ Item {
         anchors.leftMargin: 10
         anchors.rightMargin: 10
         radius: Theme.radiusSmall
-        color: root.selected ? Theme.accentSoft : (rowMouseArea.containsMouse ? Theme.panelRaised : "transparent")
+        color: root.selected ? root.accentSoftColor
+                             : (rowMouseArea.containsMouse ? Theme.panelRaised : "transparent")
         border.width: root.selected ? 1 : 0
-        border.color: "#454a75"
+        border.color: root.accentBorderColor
 
         Rectangle {
             width: 3
@@ -39,7 +47,7 @@ Item {
             anchors.leftMargin: 0
             anchors.verticalCenter: parent.verticalCenter
             radius: 2
-            color: root.selected ? Theme.accent : "transparent"
+            color: root.selected ? root.accentColor : "transparent"
         }
 
         RowLayout {
@@ -75,7 +83,7 @@ Item {
 
                     Text {
                         text: root.deviceTypeLabel
-                        color: root.selected ? Theme.accent : Theme.textMuted
+                        color: root.selected ? root.accentColor : Theme.textMuted
                         font.pixelSize: 10
                         font.weight: Font.DemiBold
                         font.letterSpacing: 0.8

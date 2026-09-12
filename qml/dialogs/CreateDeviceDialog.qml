@@ -7,6 +7,7 @@ Popup {
     id: root
 
     property var manager
+    signal deviceCreated(var device)
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape
@@ -37,10 +38,20 @@ Popup {
         }
     }
 
+    // The defaults live in Preferences so the dialog starts from the user's
+    // choice instead of a hardcoded profile and URL.
     function reset() {
-        nameField.text = "Pixel 7 Development"
-        urlField.text = "http://localhost:3000"
-        profileCombo.currentIndex = 0
+        nameField.text = Preferences.newDeviceName
+        urlField.text = Preferences.newDeviceUrl
+        profileCombo.currentIndex = indexOfProfile(Preferences.newDeviceProfile)
+    }
+
+    function indexOfProfile(name) {
+        const profiles = root.manager ? root.manager.availableProfiles : []
+        for (let i = 0; i < profiles.length; ++i) {
+            if (profiles[i].name === name) return i
+        }
+        return 0
     }
 
     onOpened: reset()
@@ -229,7 +240,9 @@ Popup {
                 compact: true
                 onClicked: {
                     if (root.manager) {
-                        root.manager.createWebDevice(nameField.text, profileCombo.currentText, urlField.text)
+                        root.deviceCreated(root.manager.createWebDevice(nameField.text,
+                                                                        profileCombo.currentText,
+                                                                        urlField.text))
                     }
                     root.close()
                 }

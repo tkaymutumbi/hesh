@@ -4,6 +4,8 @@
 
 #include <utility>
 
+#include "app/AccentPalette.hpp"
+
 namespace Hesh {
 
 Device::Device(QString id,
@@ -141,6 +143,49 @@ void Device::start()
 void Device::stop()
 {
     setStatus(Status::Stopped);
+}
+
+QString Device::accentName() const
+{
+    return m_accentName;
+}
+
+void Device::setAccentName(const QString& name)
+{
+    // A name outside the catalog is not a colour this build can draw, so it
+    // falls back to following the application accent instead of being stored.
+    const auto normalized = isKnownAccent(name) ? accentPresetFor(name).name : QString {};
+    if (normalized == m_accentName) {
+        return;
+    }
+    m_accentName = normalized;
+    emit accentChanged();
+    emit dataChanged();
+}
+
+bool Device::hasAccent() const
+{
+    return !m_accentName.isEmpty();
+}
+
+QColor Device::accent() const
+{
+    return accentPresetFor(m_accentName).accent;
+}
+
+QColor Device::accentStrong() const
+{
+    return accentPresetFor(m_accentName).strong;
+}
+
+QColor Device::accentSoft() const
+{
+    return accentPresetFor(m_accentName).soft;
+}
+
+QColor Device::accentBorder() const
+{
+    return accentPresetFor(m_accentName).border;
 }
 
 void Device::clearData()

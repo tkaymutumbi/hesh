@@ -17,6 +17,11 @@ public:
     static QString persistentStoragePath(const QString& deviceId);
     static QString cachePath(const QString& deviceId);
 
+    // The directories every device lives under. Settings surfaces them so the
+    // paths it shows and the paths the wipe uses come from one place.
+    static QString persistentRoot();
+    static QString cacheRoot();
+
     // Removes both directories. Returns true when at least one existed.
     static bool remove(const QString& deviceId);
 

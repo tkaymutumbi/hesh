@@ -14,12 +14,16 @@ Item {
     // need room next to the URL field; below these widths they collapse
     // instead of squeezing the field and pushing the last button off-screen.
     // At the default window size the workspace is ~990px, which still fits the
-    // metric labels.
-    readonly property bool showMetrics: width >= 950
+    // metric labels. The stored preference can suppress the metrics on top of
+    // the width rule.
+    readonly property bool showMetrics: width >= 950 && Preferences.showMetrics
     readonly property bool inlineActions: width >= 740
-    property bool showDevTools: false
+    property bool showDevTools: Preferences.showDevToolsOnOpen
     property bool standalone: false
     property bool frameEnabled: true
+    // Set by the window while a modal dialog covers the workspace: the
+    // application-level shortcuts below must not fire into a hidden page.
+    property bool dialogOpen: false
     signal openStandaloneRequested(var device)
 
     // WebEngine does not reliably receive application-level accelerators when
@@ -28,14 +32,14 @@ Item {
     Shortcut {
         sequence: "Ctrl+R"
         context: Qt.ApplicationShortcut
-        enabled: root.visible && !root.standalone && deviceLoader.item !== null
+        enabled: root.visible && !root.dialogOpen && !root.standalone && deviceLoader.item !== null
         onActivated: deviceLoader.item.reloadPage(false)
     }
 
     Shortcut {
         sequence: "Ctrl+Shift+R"
         context: Qt.ApplicationShortcut
-        enabled: root.visible && !root.standalone && deviceLoader.item !== null
+        enabled: root.visible && !root.dialogOpen && !root.standalone && deviceLoader.item !== null
         onActivated: deviceLoader.item.reloadPage(true)
     }
 
@@ -161,6 +165,7 @@ Item {
                         availableWidth: stage.width
                         availableHeight: stage.height
                         showDevTools: root.showDevTools
+                        allowUpscale: Preferences.allowUpscale
 
                         Behavior on presentationScale {
                             NumberAnimation { duration: 160; easing.type: Easing.OutCubic }

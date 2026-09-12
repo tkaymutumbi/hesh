@@ -19,6 +19,42 @@ ApplicationWindow {
 
     property bool maximized: false
     readonly property bool compactWindow: width < 760
+    // The workspace's application-level shortcuts stay armed while a modal
+    // dialog is up, so the window has to tell it when one is open.
+    readonly property bool modalDialogOpen: createDeviceDialog.opened
+                                            || clearDataDialog.opened
+                                            || settingsDialog.opened
+
+    // The palette is a plain value holder; the stored accent is pushed into it
+    // from the one file that owns the window.
+    Binding {
+        target: Theme
+        property: "accent"
+        value: Preferences.accent
+        restoreMode: Binding.RestoreNone
+    }
+
+    Binding {
+        target: Theme
+        property: "accentStrong"
+        value: Preferences.accentStrong
+        restoreMode: Binding.RestoreNone
+    }
+
+    Binding {
+        target: Theme
+        property: "accentSoft"
+        value: Preferences.accentSoft
+        restoreMode: Binding.RestoreNone
+    }
+
+    Binding {
+        target: Theme
+        property: "accentBorder"
+        value: Preferences.accentBorder
+        restoreMode: Binding.RestoreNone
+    }
+
     // Presentation is session-only. The maps are replaced (rather than
     // mutated in place) so all QML bindings observing them are invalidated.
     property var standaloneWindows: ({})
@@ -267,6 +303,26 @@ ApplicationWindow {
                         compact: true
                         secondary: true
                         visible: !window.compactWindow
+                        onClicked: settingsDialog.open()
+                    }
+
+                    Item {
+                        Layout.preferredWidth: 34
+                        Layout.preferredHeight: 34
+                        visible: window.compactWindow
+
+                        IconButton {
+                            id: settingsButton
+                            anchors.fill: parent
+                            iconText: ""
+                            tooltip: "Settings"
+                            onClicked: settingsDialog.open()
+                        }
+
+                        SettingsGlyph {
+                            anchors.centerIn: parent
+                            color: settingsButton.hovered ? Theme.text : Theme.textMuted
+                        }
                     }
 
                 }
@@ -313,6 +369,7 @@ ApplicationWindow {
                         anchors.fill: parent
                         visible: deviceManager.deviceCount > 0
                         manager: deviceManager
+                        dialogOpen: window.modalDialogOpen
                         device: deviceManager.selectedDevice
                         standalone: deviceManager.selectedDevice
                                      ? window.isDeviceDetached(deviceManager.selectedDevice.id)
@@ -328,10 +385,18 @@ ApplicationWindow {
     CreateDeviceDialog {
         id: createDeviceDialog
         manager: deviceManager
+        onDeviceCreated: (device) => {
+            if (Preferences.openInStandalone) window.openStandaloneForDevice(device)
+        }
     }
 
     ClearDeviceDataDialog {
         id: clearDataDialog
+        manager: deviceManager
+    }
+
+    SettingsDialog {
+        id: settingsDialog
         manager: deviceManager
     }
 

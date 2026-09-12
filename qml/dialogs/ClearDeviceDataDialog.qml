@@ -3,13 +3,16 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Hesh 1.0
 
-// Destructive confirmation for the device menu's Clear Data action. The wipe
-// itself lives in Device::clearData(); this dialog only gates the call.
+// Destructive confirmation for Clear Data. The wipe itself lives in
+// Device::clearData(); this dialog only gates the call. It serves both the
+// per-device menu action and the settings dialog's Clear All action, so the
+// wording and the confirmation step cannot drift apart.
 Popup {
     id: root
 
     property var manager
     property var device: null
+    property bool allDevices: false
 
     modal: true
     focus: true
@@ -43,7 +46,10 @@ Popup {
     }
 
     function clearData() {
-        if (root.manager && root.device) root.manager.clearDeviceData(root.device.id)
+        if (root.manager) {
+            if (root.allDevices) root.manager.clearAllDeviceData()
+            else if (root.device) root.manager.clearDeviceData(root.device.id)
+        }
         root.close()
     }
 
@@ -52,7 +58,7 @@ Popup {
 
         Text {
             Layout.fillWidth: true
-            text: "Clear Device Data"
+            text: root.allDevices ? "Clear All Device Data" : "Clear Device Data"
             color: Theme.text
             font.pixelSize: 19
             font.weight: Font.Medium
@@ -62,9 +68,16 @@ Popup {
 
         Text {
             Layout.fillWidth: true
-            text: root.device
-                  ? "Delete the browser data stored for \"" + root.device.name + "\"?"
-                  : "Delete the browser data stored for this device?"
+            text: {
+                if (!root.allDevices) {
+                    return root.device
+                            ? "Delete the browser data stored for \"" + root.device.name + "\"?"
+                            : "Delete the browser data stored for this device?"
+                }
+                const count = root.manager ? root.manager.deviceCount : 0
+                return count === 1 ? "Delete the browser data stored for 1 device?"
+                                   : "Delete the browser data stored for all " + count + " devices?"
+            }
             color: Theme.text
             font.pixelSize: 13
             wrapMode: Text.WordWrap
@@ -97,7 +110,7 @@ Popup {
             }
 
             AppButton {
-                text: "Clear Data"
+                text: root.allDevices ? "Clear All" : "Clear Data"
                 destructive: true
                 compact: true
                 onClicked: root.clearData()

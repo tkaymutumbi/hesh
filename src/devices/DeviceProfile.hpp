@@ -36,6 +36,8 @@ struct DeviceRecord
     QString type;
     QString profileName;
     QString url;
+    // Empty means the device follows the application accent.
+    QString accent;
 };
 
 QJsonObject deviceRecordToJson(const DeviceRecord& record);

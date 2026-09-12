@@ -28,6 +28,11 @@ Item {
     property bool pageLoading: false
     property bool pageFailed: false
     property string pageError: ""
+    // A device accent overrides the application accent for this preview. The
+    // device model stores "no accent" as an empty name and never reads
+    // application preferences, so the fallback is resolved here.
+    readonly property color deviceAccent: root.device !== null && root.device.hasAccent
+                                          ? root.device.accent : Theme.accent
 
     // Set when a load reports no progress for a while. A connection that
     // black-holes never fails, so the loading state has to say it is stuck.
@@ -64,7 +69,7 @@ Item {
                                                 && webView.loadProgress > 0 && webView.loadProgress < 100)
     readonly property color stateColor: root.frameState === "error" ? Theme.error
                                        : root.frameState === "stopped" ? Theme.textFaint
-                                       : Theme.accent
+                                       : root.deviceAccent
     // Every state shows the same slot in the same order: glyph, kicker, title,
     // detail, target URL, progress, raw code, actions. Empty strings collapse.
     readonly property var stateText: {
@@ -529,7 +534,7 @@ Item {
                                 }
 
                                 ShapePath {
-                                    strokeColor: Theme.accent
+                                    strokeColor: root.deviceAccent
                                     strokeWidth: 2
                                     fillColor: "transparent"
                                     capStyle: ShapePath.RoundCap
@@ -667,7 +672,7 @@ Item {
                             width: parent.width * root.progressValue / 100
                             height: parent.height
                             radius: parent.radius
-                            color: Theme.accent
+                            color: root.deviceAccent
 
                             Behavior on width {
                                 NumberAnimation { duration: 150; easing.type: Easing.OutCubic }

@@ -18,14 +18,24 @@ QString DeviceStorage::devicePath(const QString& location, const QString& device
     return QDir(location).filePath(QLatin1String(webDeviceDirectory) + QLatin1Char('/') + deviceId);
 }
 
+QString DeviceStorage::persistentRoot()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+}
+
+QString DeviceStorage::cacheRoot()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+}
+
 QString DeviceStorage::persistentStoragePath(const QString& deviceId)
 {
-    return devicePath(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), deviceId);
+    return devicePath(persistentRoot(), deviceId);
 }
 
 QString DeviceStorage::cachePath(const QString& deviceId)
 {
-    return devicePath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation), deviceId);
+    return devicePath(cacheRoot(), deviceId);
 }
 
 bool DeviceStorage::remove(const QString& deviceId)

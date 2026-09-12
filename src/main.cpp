@@ -8,14 +8,23 @@
 
 #include <cstdio>
 
+#include <QtWebEngineCore/qtwebenginecoreglobal.h>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include "app/Application.hpp"
+#include "app/Preferences.hpp"
 #include "devices/Device.hpp"
 #include "web/WebDevice.hpp"
 
 int main(int argc, char* argv[])
 {
+    // Set the identity first: QSettings resolves the preference file from these
+    // names, and the stored Chromium flags have to be read before WebEngine
+    // starts.
+    QCoreApplication::setApplicationName(QStringLiteral("Hesh"));
+    QCoreApplication::setOrganizationName(QStringLiteral("Hesh"));
+    QCoreApplication::setApplicationVersion(QStringLiteral(HESH_VERSION));
+
     // Do NOT force dark mode on web content.  `--force-dark-mode` makes
     // Chromium recolor light pages and also desaturates already-dark pages
     // (e.g. lime #A3FF12 → muted olive) which breaks color fidelity per
@@ -25,21 +34,26 @@ int main(int argc, char* argv[])
     // the background-rendering guards required by persistent device surfaces.
     // Chromium can otherwise treat a covered Wayland window like a background
     // tab and stop producing frames after a workspace switch.
-    auto chromiumFlags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
-    constexpr const char* renderingFlags[] = {
-        "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
-        "--disable-renderer-backgrounding",
-    };
-    for (const auto* flag : renderingFlags) {
-        if (!chromiumFlags.contains(flag)) {
-            if (!chromiumFlags.isEmpty()) {
-                chromiumFlags.append(' ');
+    //
+    // Order matters: stored flags first, then the environment, then the guards.
+    // Chromium keeps the last value for a repeated switch, so an env var set for
+    // one launch outranks the stored preference, and the guards always apply.
+    QStringList chromiumFlags;
+    const auto appendFlags = [&chromiumFlags](const QString& flags) {
+        for (const auto& flag : flags.split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
+            if (!chromiumFlags.contains(flag)) {
+                chromiumFlags.append(flag);
             }
-            chromiumFlags.append(flag);
         }
+    };
+    appendFlags(Hesh::storedExtraChromiumFlags());
+    appendFlags(QString::fromLocal8Bit(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS")));
+    for (const auto* flag : {"--disable-background-timer-throttling",
+                             "--disable-backgrounding-occluded-windows",
+                             "--disable-renderer-backgrounding"}) {
+        appendFlags(QLatin1String(flag));
     }
-    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", chromiumFlags);
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", chromiumFlags.join(QLatin1Char(' ')).toLocal8Bit());
     // HiDPI: use PassThrough for fractional scales (e.g. 1.25/1.5 on Hyprland)
     // so WebEngine renders at native physical resolution instead of rounded.
     QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
@@ -47,8 +61,6 @@ int main(int argc, char* argv[])
     QtWebEngineQuick::initialize();
 
     QGuiApplication app(argc, argv);
-    QCoreApplication::setApplicationName(QStringLiteral("Hesh"));
-    QCoreApplication::setOrganizationName(QStringLiteral("Hesh"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Hesh"));
     QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Hesh/assets/icons/hesh.png")));
 
@@ -58,6 +70,13 @@ int main(int argc, char* argv[])
                                                  QStringLiteral("Web devices are created by DeviceManager"));
 
     Hesh::Application hesh;
+    // Process-level facts for the diagnostics rows: main.cpp owns both.
+    hesh.preferences()->setRuntimeFacts(
+        Hesh::highDpiRoundingPolicyName(), QString::fromLatin1(qWebEngineChromiumVersion()));
+    // Preferences are read from unrelated corners of the tree, so they are a
+    // singleton rather than another context property.
+    qmlRegisterSingletonInstance("Hesh", 1, 0, "Preferences", hesh.preferences());
+
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("deviceManager"), hesh.deviceManager());
 

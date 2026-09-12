@@ -18,7 +18,7 @@ Item {
             radius: 18
             color: Theme.accentSoft
             border.width: 1
-            border.color: "#454a75"
+            border.color: Theme.accentBorder
 
             Rectangle {
                 width: 25

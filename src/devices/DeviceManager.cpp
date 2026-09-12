@@ -171,6 +171,28 @@ void DeviceManager::clearDeviceData(const QString& id)
     }
 }
 
+void DeviceManager::clearAllDeviceData()
+{
+    // Each device schedules its own wipe on the next event-loop turn, so the
+    // whole model can be asked at once: one device's pending wipe never blocks
+    // the next one's profile release.
+    for (int row = 0; row < m_model.rowCount(); ++row) {
+        if (auto* device = m_model.at(row)) {
+            device->clearData();
+        }
+    }
+}
+
+void DeviceManager::setDeviceAccent(const QString& id, const QString& accentName)
+{
+    // An empty name clears the override and returns the device to the
+    // application accent; Device::setAccentName() rejects unknown names and
+    // emits dataChanged, which persists the device list.
+    if (auto* device = findById(id)) {
+        device->setAccentName(accentName);
+    }
+}
+
 void DeviceManager::selectDevice(const QString& id)
 {
     setSelectedDevice(findById(id));
@@ -209,6 +231,9 @@ void DeviceManager::load()
                                      DeviceProfile::fromName(record.profileName),
                                      record.url,
                                      this);
+        // Set before the device joins the model so restoring a stored accent is
+        // not mistaken for an edit worth persisting.
+        device->setAccentName(record.accent);
         addDevice(device, false);
         device->start();
     }
@@ -256,6 +281,7 @@ void DeviceManager::persist() const
         record.name = device->name();
         record.type = device->typeName();
         record.profileName = device->profileName();
+        record.accent = device->accentName();
         if (const auto* webDevice = qobject_cast<const WebDevice*>(device)) {
             record.url = webDevice->url();
         }

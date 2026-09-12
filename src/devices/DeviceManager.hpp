@@ -65,6 +65,8 @@ public:
                                            const QString& url);
     Q_INVOKABLE void removeDevice(const QString& id);
     Q_INVOKABLE void clearDeviceData(const QString& id);
+    Q_INVOKABLE void clearAllDeviceData();
+    Q_INVOKABLE void setDeviceAccent(const QString& id, const QString& accentName);
     Q_INVOKABLE void selectDevice(const QString& id);
     Q_INVOKABLE void startDevice(const QString& id);
     Q_INVOKABLE void stopDevice(const QString& id);

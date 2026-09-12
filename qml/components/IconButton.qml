@@ -7,6 +7,9 @@ Rectangle {
 
     property string iconText: "·"
     property string tooltip: ""
+    // Exposed so a caller that draws its own icon in this button's frame can
+    // tint it on hover.
+    readonly property bool hovered: mouseArea.containsMouse
     signal clicked()
 
     implicitWidth: 32
@@ -17,6 +20,7 @@ Rectangle {
 
     Text {
         anchors.centerIn: parent
+        visible: root.iconText.length > 0
         text: root.iconText
         color: Theme.textMuted
         font.pixelSize: root.iconText === "×" ? 22 : 16

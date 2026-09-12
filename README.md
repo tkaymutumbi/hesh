@@ -1,6 +1,6 @@
 # Hesh
 
-Current version: **0.1.4**
+Current version: **0.1.5**
 
 Hesh is a lightweight Linux desktop environment for developing and testing
 web devices, with a future path to real Android virtual devices. It is a
@@ -29,7 +29,24 @@ Implemented:
 - Hardware-accelerated preview rendering with explicit preview states: animated
   loading with progress, classified connection errors with retry, and a stopped
   state that can start the device again
-- Core Qt Test coverage for creation, removal, clearing, selection, profiles, and persistence
+- Settings dialog with five sections. Devices: the name, URL, and profile the
+  Create Device dialog starts from. Preview: show DevTools on open, open new
+  devices in a standalone window, allow upscaling, show viewport metrics.
+  Appearance: six accent presets that retint the whole UI live. Storage: the
+  device data and cache directories, Open Data Folder, and a confirmed Clear
+  All Device Data action. Advanced: extra Chromium flags with an explicit
+  restart-required state and relaunch action, plus read-only diagnostics
+  (Hesh/Qt/Chromium versions, HiDPI rounding policy, effective browser flags).
+  Everything applies immediately, persists through `QSettings`, and is
+  reachable from the titlebar in both full and compact windows
+- Per-device accent, chosen from the device's right-click menu: six presets plus
+  "Follow App Accent", which is the default for every device. The sidebar card
+  and the preview's loading states repaint immediately, and the choice persists
+  with the device record
+- Core Qt Test coverage for creation, removal, clearing, clearing all devices,
+  selection, profiles, persistence, preference defaults and round-trip, accent
+  fallback, device accent storage and colour resolution, restart-required
+  tracking, and reset scope
 
 Not implemented yet:
 
@@ -71,9 +88,11 @@ ctest --test-dir build --output-on-failure
 
 The executable is `build/hesh` with the current CMake configuration.
 
-Web-device metadata is stored through `QSettings`. Browser state is isolated by
-device id under the platform application-data and cache directories; generated
-Chromium data is never written into the source tree.
+Web-device metadata is stored through `QSettings`. Application preferences use
+the same file under a `preferences` group, and restoring defaults only clears
+that group, so devices and their browser data survive. Browser state is
+isolated by device id under the platform application-data and cache
+directories; generated Chromium data is never written into the source tree.
 
 On a Wayland compositor such as Hyprland, the application uses a frameless
 Qt Quick window and calls the compositor's system move operation for titlebar

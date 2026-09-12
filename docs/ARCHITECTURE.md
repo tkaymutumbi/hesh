@@ -1,15 +1,16 @@
 # Hesh architecture
 
-This document describes Hesh **0.1.4**.
+This document describes Hesh **0.1.5**.
 
 Hesh keeps the QML presentation layer separate from the C++ application and
 device infrastructure.
 
 ```text
 QML UI
-   ↓ context properties and QObject properties
+   ↓ QML singleton, context properties and QObject properties
 Application
    ├── Settings
+   ├── Preferences
    └── DeviceManager
           ↓ QAbstractListModel + selectedDevice
        Device
@@ -19,15 +20,88 @@ Application
 
 ## Application ownership
 
-`Hesh::Application` owns one `Settings` instance and one `DeviceManager`.
-`DeviceManager` owns the dynamically created `Device` objects through Qt
-parent ownership. QML receives the manager and reads its model; it does not own
-or maintain the canonical device collection.
+`Hesh::Application` owns one `Settings` instance, one `Preferences` instance,
+and one `DeviceManager`. `DeviceManager` owns the dynamically created `Device`
+objects through Qt parent ownership. QML receives the manager and reads its
+model; it does not own or maintain the canonical device collection.
 
 `Settings` is a small replaceable boundary over `QSettings`. It serializes the
 device list as compact JSON in one settings value, plus the selected device id.
 This keeps persistence out of QML and leaves room for a database or project
 file later.
+
+## Preferences
+
+`Preferences` is the QML-facing boundary over everything in `Settings` that is
+not a device record. It owns the preference keys, their defaults, their
+validation, and the change notifications QML binds to, so no QML file parses or
+writes a settings key. It is registered as the `Preferences` QML singleton in
+`main.cpp`: preferences are read from unrelated corners of the tree — the
+palette, the preview frame, the toolbars, the create-device dialog — and
+threading one object through all of them would add plumbing without adding
+clarity. Device-scoped objects keep their existing explicit `manager`
+injection.
+
+Preferences live under a `preferences` group in the same settings file as the
+device records. `Settings::resetPreferences()` removes that group and nothing
+else, so "Restore Defaults" can never delete a device or its browser data. Two
+preferences are the exception to the object boundary: the extra Chromium flags
+are read through `Hesh::storedExtraChromiumFlags()` and merged into
+`QTWEBENGINE_CHROMIUM_FLAGS` before `QtWebEngineQuick::initialize()`, because
+Chromium reads its command line before any `Application` exists. Both readers
+resolve the key through `Settings::preferenceSettingsKey()`.
+
+Flag precedence is deliberate: stored preferences first, then the environment,
+then the rendering guards. Chromium keeps the last value for a repeated switch,
+so a flag exported for one launch outranks the stored preference, and the
+guards that keep covered Wayland surfaces producing frames always apply. A
+stored-flag edit cannot take effect in the running process, so `Preferences`
+reports `restartRequired` against the flags this process actually started with
+and the settings dialog offers a relaunch instead of pretending the change
+applied.
+
+The accent is six presets rather than a free colour. The base accent has three
+derived shades — `accentStrong`, `accentSoft`, and `accentBorder`, the last of
+which used to be hardcoded at the selected-device card and the empty-state
+badge — and a preset table is the only thing that keeps them coherent for
+values nobody has tested. `Theme` stays a plain palette: `Main.qml` binds the
+stored accent into it, and every consumer already binds to `Theme.accent`, so a
+change repaints the whole UI, including standalone windows, without any
+component re-reading a preference.
+
+A device can carry an accent of its own. `DeviceRecord.accent` holds a preset
+name, and an empty name means the device follows the application accent, which
+is what every record written before the feature existed has. The fallback is
+resolved in QML by the two surfaces that show a device — `DeviceListItem` and
+`DeviceFrame` — rather than in the model: a device never reads application
+preferences, so the dependency stays one-way. `Device::setAccentName()` rejects
+a name the catalog does not contain back to "follow the app accent" instead of
+storing a colour this build cannot draw. The picker lives in the device context
+menu, which keeps the app-level choice in Settings and the device-level choice
+on the device visibly separate, and `AccentPicker` renders both from the single
+C++ catalog, so the two pickers cannot disagree about what a preset looks like.
+
+Settings that drive rendering are read where the value is consumed:
+`DeviceWorkspace` takes the metrics and DevTools preferences, and passes the
+upscale preference to `DeviceFrame.allowUpscale`. The workspace also receives a
+`dialogOpen` flag, because its `Ctrl+R` and `Ctrl+Shift+R` shortcuts are
+application-level and would otherwise fire into a page the settings dialog is
+covering.
+
+The settings dialog is a modal `Popup`, like `Create Device` and `Clear Data`.
+A popup leaves the device workspace and its live `WebEngineView` mounted
+underneath, which keeps the browser-surface lifecycle out of the settings path
+entirely. `ClearDeviceDataDialog` serves both the per-device menu action and the
+settings dialog's Clear All action, so the confirmation wording and the wipe
+protocol have one implementation.
+
+The settings dialog is reachable from the titlebar in every window size. Below
+`compactWindow` the labelled button would not fit, so the titlebar hosts a
+`SettingsGlyph` overlay on an `IconButton` instead of a text character: a font
+gear can be substituted by a colour emoji, and an icon font or raster asset
+would be a heavier contract than three drawn tracks. `SettingsGlyph` follows the
+empty-state device glyph, which is drawn from primitives for the same reason.
+Icons in this UI are drawn or bundled, never emoji characters.
 
 Browser persistence is separate from device metadata. Each web device receives
 an isolated `WebEngineProfile` keyed by its stable device id. Cookies, local
@@ -48,8 +122,9 @@ that writes the data and the operation that wipes it can never disagree.
 
 ## Device model
 
-`Device` contains identity, type, lifecycle status, and display profile data.
-`WebDevice` adds its URL and owns the web-device lifecycle boundary. The model
+`Device` contains identity, type, lifecycle status, display profile data, and an
+optional accent. `WebDevice` adds its URL and owns the web-device lifecycle
+boundary. The model
 uses roles backed by actual `Device` objects, rather than two hardcoded device
 slots or a large collection of QVariant maps.
 

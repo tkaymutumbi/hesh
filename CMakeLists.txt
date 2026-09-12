@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Hesh
-    VERSION 0.1.4
+    VERSION 0.1.5
     DESCRIPTION "A lightweight device development and emulation environment"
     LANGUAGES CXX
 )
@@ -20,8 +20,12 @@ qt_policy(SET QTP0001 NEW)
 qt_policy(SET QTP0004 NEW)
 
 qt_add_library(hesh_core STATIC
+    src/app/AccentPalette.cpp
+    src/app/AccentPalette.hpp
     src/app/Application.cpp
     src/app/Application.hpp
+    src/app/Preferences.cpp
+    src/app/Preferences.hpp
     src/app/Settings.cpp
     src/app/Settings.hpp
     src/devices/Device.cpp
@@ -57,8 +61,13 @@ target_link_libraries(hesh
         Qt6::Gui
         Qt6::Quick
         Qt6::QuickControls2
+        Qt6::WebEngineCore
         Qt6::WebEngineQuick
 )
+
+# The About section reports the running build, so the version cannot drift from
+# the project version.
+target_compile_definitions(hesh PRIVATE HESH_VERSION="${PROJECT_VERSION}")
 
 set_source_files_properties(qml/theme/Theme.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
@@ -70,6 +79,7 @@ qt_add_qml_module(hesh
     QML_FILES
         qml/Main.qml
         qml/components/AppButton.qml
+        qml/components/AccentPicker.qml
         qml/components/DeviceFrame.qml
         qml/components/StandaloneDeviceWindow.qml
         qml/components/StandaloneContextMenu.qml
@@ -79,9 +89,12 @@ qt_add_qml_module(hesh
         qml/components/EmptyState.qml
         qml/components/IconButton.qml
         qml/components/Sidebar.qml
+        qml/components/SettingSwitch.qml
+        qml/components/SettingsGlyph.qml
         qml/components/StatusBadge.qml
         qml/dialogs/ClearDeviceDataDialog.qml
         qml/dialogs/CreateDeviceDialog.qml
+        qml/dialogs/SettingsDialog.qml
         qml/pages/DeviceWorkspace.qml
         qml/theme/Theme.qml
     RESOURCES

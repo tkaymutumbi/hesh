@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QObject>
 #include <QString>
 
@@ -20,6 +21,12 @@ class Device : public QObject
     Q_PROPERTY(int viewportHeight READ viewportHeight NOTIFY profileChanged)
     Q_PROPERTY(double devicePixelRatio READ devicePixelRatio NOTIFY profileChanged)
     Q_PROPERTY(QString userAgent READ userAgent NOTIFY profileChanged)
+    Q_PROPERTY(QString accentName READ accentName WRITE setAccentName NOTIFY accentChanged)
+    Q_PROPERTY(bool hasAccent READ hasAccent NOTIFY accentChanged)
+    Q_PROPERTY(QColor accent READ accent NOTIFY accentChanged)
+    Q_PROPERTY(QColor accentStrong READ accentStrong NOTIFY accentChanged)
+    Q_PROPERTY(QColor accentSoft READ accentSoft NOTIFY accentChanged)
+    Q_PROPERTY(QColor accentBorder READ accentBorder NOTIFY accentChanged)
 
 public:
     enum class Status {
@@ -58,6 +65,20 @@ public:
     QString userAgent() const;
     void setProfile(const DeviceProfile& profile);
 
+    // The accent this device is shown with. An empty name means the device
+    // follows the application accent: the presentation layer resolves that
+    // fallback, so the device model never reads application preferences. Names
+    // outside the catalog are rejected back to "follow the app accent" rather
+    // than leaving the device with no palette.
+    QString accentName() const;
+    void setAccentName(const QString& name);
+    bool hasAccent() const;
+    // Meaningful as a colour only while hasAccent() is true.
+    QColor accent() const;
+    QColor accentStrong() const;
+    QColor accentSoft() const;
+    QColor accentBorder() const;
+
     virtual void start();
     virtual void stop();
 
@@ -72,6 +93,7 @@ signals:
     void nameChanged();
     void statusChanged();
     void profileChanged();
+    void accentChanged();
     void dataChanged();
     // Emitted before and after clearData() removes the persistent data.
     void dataClearing();
@@ -87,6 +109,7 @@ private:
     QString m_name;
     DeviceType m_type;
     DeviceProfile m_profile;
+    QString m_accentName;
     Status m_status = Status::Stopped;
 };
 
