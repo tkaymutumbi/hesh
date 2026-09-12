@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
@@ -30,6 +31,9 @@ private slots:
     void unknownAccentFallsBack();
     void deviceAccentColors();
     void deviceAccentRoundTrip();
+    void deviceRunStatePersists();
+    void legacyDeviceRecordsLoadStopped();
+    void deviceContentThemePersists();
     void restartRequiredTracksEdits();
     void resetPreferencesKeepsDevices();
 };
@@ -370,6 +374,126 @@ void DeviceTests::deviceAccentRoundTrip()
     reloaded.selectDevice(inheritedId);
     QVERIFY(reloaded.selectedDevice() != nullptr);
     QCOMPARE(reloaded.selectedDevice()->hasAccent(), false);
+}
+
+void DeviceTests::deviceRunStatePersists()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto settingsPath = directory.filePath(QStringLiteral("settings.ini"));
+
+    QString runningId;
+    QString stoppedId;
+    {
+        Settings settings(QStringLiteral("HeshTests"), QStringLiteral("RunState"), settingsPath);
+        DeviceManager manager(&settings);
+        auto* running = manager.createWebDevice(QStringLiteral("Running"), QStringLiteral("Pixel 7"), {});
+        auto* stopped = manager.createWebDevice(QStringLiteral("Stopped"), QStringLiteral("Pixel 8"), {});
+        QVERIFY(running != nullptr);
+        QVERIFY(stopped != nullptr);
+        runningId = running->id();
+        stoppedId = stopped->id();
+
+        // A created device is running until it is stopped.
+        QCOMPARE(running->statusName(), QStringLiteral("Running"));
+        manager.stopDevice(stoppedId);
+        QCOMPARE(stopped->statusName(), QStringLiteral("Stopped"));
+    }
+
+    // The state is written when it changes rather than on exit, so a stopped
+    // device is already stopped in storage.
+    {
+        Settings settings(QStringLiteral("HeshTests"), QStringLiteral("RunState"), settingsPath);
+        DeviceManager manager(&settings);
+        QCOMPARE(manager.deviceCount(), 2);
+
+        manager.selectDevice(runningId);
+        QCOMPARE(manager.selectedDevice()->statusName(), QStringLiteral("Running"));
+        manager.selectDevice(stoppedId);
+        QCOMPARE(manager.selectedDevice()->statusName(), QStringLiteral("Stopped"));
+
+        // Opening Hesh starts only what was running; the rest stay stopped.
+        manager.startDevice(stoppedId);
+        manager.stopDevice(runningId);
+    }
+
+    Settings settings(QStringLiteral("HeshTests"), QStringLiteral("RunState"), settingsPath);
+    DeviceManager manager(&settings);
+    manager.selectDevice(runningId);
+    QCOMPARE(manager.selectedDevice()->statusName(), QStringLiteral("Stopped"));
+    manager.selectDevice(stoppedId);
+    QCOMPARE(manager.selectedDevice()->statusName(), QStringLiteral("Running"));
+}
+
+void DeviceTests::legacyDeviceRecordsLoadStopped()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto settingsPath = directory.filePath(QStringLiteral("settings.ini"));
+
+    // A record written before run state was persisted carries no "running" key.
+    {
+        QSettings raw(settingsPath, QSettings::IniFormat);
+        raw.setValue(QStringLiteral("devices"),
+                     QByteArray("[{\"id\":\"legacy-device\",\"name\":\"Legacy\",\"type\":\"web\","
+                                "\"profile\":\"Pixel 7\",\"url\":\"http://localhost:3000\"}]"));
+        raw.sync();
+    }
+
+    Settings settings(QStringLiteral("HeshTests"), QStringLiteral("Legacy"), settingsPath);
+    DeviceManager manager(&settings);
+    QCOMPARE(manager.deviceCount(), 1);
+    QVERIFY(manager.selectedDevice() != nullptr);
+    QCOMPARE(manager.selectedDevice()->name(), QStringLiteral("Legacy"));
+    // Absent means not running: Hesh must not start devices it was never told
+    // to start, and the preview shows its stopped state instead.
+    QCOMPARE(manager.selectedDevice()->statusName(), QStringLiteral("Stopped"));
+}
+
+void DeviceTests::deviceContentThemePersists()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto settingsPath = directory.filePath(QStringLiteral("settings.ini"));
+
+    QString darkId;
+    QString systemId;
+    {
+        Settings settings(QStringLiteral("HeshTests"), QStringLiteral("Theme"), settingsPath);
+        DeviceManager manager(&settings);
+        auto* dark = manager.createWebDevice(QStringLiteral("Dark"), QStringLiteral("Pixel 7"), {});
+        auto* system = manager.createWebDevice(QStringLiteral("System"), QStringLiteral("Pixel 8"), {});
+        QVERIFY(dark != nullptr);
+        QVERIFY(system != nullptr);
+        darkId = dark->id();
+        systemId = system->id();
+
+        // A device follows the desktop scheme until it is told otherwise.
+        QCOMPARE(dark->contentTheme(), QStringLiteral("system"));
+
+        manager.setDeviceContentTheme(darkId, QStringLiteral("dark"));
+        QCOMPARE(dark->contentTheme(), QStringLiteral("dark"));
+
+        // Only force-dark exists; anything else is "system", including values a
+        // hand-edited settings file might carry.
+        manager.setDeviceContentTheme(systemId, QStringLiteral("light"));
+        QCOMPARE(system->contentTheme(), QStringLiteral("system"));
+        manager.setDeviceContentTheme(QStringLiteral("missing-device"), QStringLiteral("dark"));
+    }
+
+    Settings reloadedSettings(QStringLiteral("HeshTests"), QStringLiteral("Theme"), settingsPath);
+    DeviceManager reloaded(&reloadedSettings);
+    reloaded.selectDevice(darkId);
+    QCOMPARE(reloaded.selectedDevice()->contentTheme(), QStringLiteral("dark"));
+    reloaded.selectDevice(systemId);
+    QCOMPARE(reloaded.selectedDevice()->contentTheme(), QStringLiteral("system"));
+
+    // Switching back to the desktop scheme round-trips too.
+    reloaded.setDeviceContentTheme(darkId, QStringLiteral("system"));
+    Settings again(QStringLiteral("HeshTests"), QStringLiteral("Theme"), settingsPath);
+    DeviceManager reloadedAgain(&again);
+    reloadedAgain.selectDevice(darkId);
+    QCOMPARE(reloadedAgain.selectedDevice()->contentTheme(), QStringLiteral("system"));
 }
 
 void DeviceTests::restartRequiredTracksEdits()

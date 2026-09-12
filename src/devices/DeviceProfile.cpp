@@ -62,6 +62,8 @@ QJsonObject deviceRecordToJson(const DeviceRecord& record)
         {QStringLiteral("profile"), record.profileName},
         {QStringLiteral("url"), record.url},
         {QStringLiteral("accent"), record.accent},
+        {QStringLiteral("running"), record.running},
+        {QStringLiteral("contentTheme"), record.contentTheme},
     };
 }
 
@@ -82,6 +84,12 @@ std::optional<DeviceRecord> deviceRecordFromJson(const QJsonObject& object)
     // Records written before per-device accents existed have no accent key, and
     // an empty accent means the device follows the application accent.
     record.accent = object.value(QStringLiteral("accent")).toString();
+    // Records written before run state was persisted have no key; they load
+    // stopped rather than starting devices the user never asked to start.
+    record.running = object.value(QStringLiteral("running")).toBool();
+    // Absent means the page follows the desktop scheme; Device normalizes an
+    // unknown or empty value to "system" as well.
+    record.contentTheme = object.value(QStringLiteral("contentTheme")).toString();
     return record;
 }
 

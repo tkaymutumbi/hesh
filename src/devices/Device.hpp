@@ -27,6 +27,7 @@ class Device : public QObject
     Q_PROPERTY(QColor accentStrong READ accentStrong NOTIFY accentChanged)
     Q_PROPERTY(QColor accentSoft READ accentSoft NOTIFY accentChanged)
     Q_PROPERTY(QColor accentBorder READ accentBorder NOTIFY accentChanged)
+    Q_PROPERTY(QString contentTheme READ contentTheme WRITE setContentTheme NOTIFY contentThemeChanged)
 
 public:
     enum class Status {
@@ -55,6 +56,10 @@ public:
 
     Status status() const;
     QString statusName() const;
+    // True while the device is up, including the transient Starting step. This
+    // is what a persisted record stores, so a device cannot be written as
+    // stopped while it is still coming up.
+    bool isRunning() const;
     void setStatus(Status status);
 
     const DeviceProfile& profile() const;
@@ -79,6 +84,13 @@ public:
     QColor accentSoft() const;
     QColor accentBorder() const;
 
+    // Web content theme for this device. Only "dark" and "system" exist:
+    // Qt WebEngine exposes Chromium's force-dark rendering per view, but no
+    // per-view way to request a light scheme, and the desktop's scheme is the
+    // only lever for the light case. Any other value normalizes to "system".
+    QString contentTheme() const;
+    void setContentTheme(const QString& theme);
+
     virtual void start();
     virtual void stop();
 
@@ -94,6 +106,7 @@ signals:
     void statusChanged();
     void profileChanged();
     void accentChanged();
+    void contentThemeChanged();
     void dataChanged();
     // Emitted before and after clearData() removes the persistent data.
     void dataClearing();
@@ -110,6 +123,7 @@ private:
     DeviceType m_type;
     DeviceProfile m_profile;
     QString m_accentName;
+    QString m_contentTheme = QStringLiteral("system");
     Status m_status = Status::Stopped;
 };
 

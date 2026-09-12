@@ -33,6 +33,12 @@ Item {
     // application preferences, so the fallback is resolved here.
     readonly property color deviceAccent: root.device !== null && root.device.hasAccent
                                           ? root.device.accent : Theme.accent
+    // Chromium force-dark for this device. It is a renderer setting applied at
+    // paint time, so it does not appear in computed styles — a light-styled page
+    // really does render dark. Pages that ship their own dark styling keep it;
+    // force-dark only fills in pages that ignore the scheme.
+    readonly property bool forceDarkContent: root.device !== null
+                                             && root.device.contentTheme === "dark"
 
     // Set when a load reports no progress for a while. A connection that
     // black-holes never fails, so the loading state has to say it is stuck.
@@ -369,6 +375,17 @@ Item {
         function onActiveChanged() {
             if (root.Window.window && root.Window.window.active && root.visible)
                 Qt.callLater(root.recoverSurface)
+        }
+    }
+
+    Connections {
+        target: root.device
+
+        function onContentThemeChanged() {
+            // Force dark is a renderer setting that only takes effect for the
+            // next paint of a loaded document, so a change is applied by
+            // reloading rather than leaving the old rendering on screen.
+            if (root.device && root.device.status === "Running") root.reloadPage(false)
         }
     }
 
@@ -728,6 +745,7 @@ Item {
                                                    (root.presentationScale > 0 ? root.presentationScale : 1.0)
                                                    + root.renderWakeNudge))
                 backgroundColor: "#0d1014"
+                settings.forceDarkMode: root.forceDarkContent
                 settings.accelerated2dCanvasEnabled: true
                 settings.webGLEnabled: true
                 settings.fullScreenSupportEnabled: false

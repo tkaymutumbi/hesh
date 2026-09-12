@@ -81,6 +81,11 @@ QString Device::statusName() const
     return QStringLiteral("Stopped");
 }
 
+bool Device::isRunning() const
+{
+    return m_status == Status::Running || m_status == Status::Starting;
+}
+
 void Device::setStatus(Status status)
 {
     if (status == m_status) {
@@ -186,6 +191,24 @@ QColor Device::accentSoft() const
 QColor Device::accentBorder() const
 {
     return accentPresetFor(m_accentName).border;
+}
+
+QString Device::contentTheme() const
+{
+    return m_contentTheme;
+}
+
+void Device::setContentTheme(const QString& theme)
+{
+    const auto normalized = theme.trimmed().compare(QLatin1String("dark"), Qt::CaseInsensitive) == 0
+                                ? QStringLiteral("dark")
+                                : QStringLiteral("system");
+    if (normalized == m_contentTheme) {
+        return;
+    }
+    m_contentTheme = normalized;
+    emit contentThemeChanged();
+    emit dataChanged();
 }
 
 void Device::clearData()

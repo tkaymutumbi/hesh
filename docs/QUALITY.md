@@ -116,7 +116,7 @@ Prevents invisible `zoomFactor <0.25` clamping which would make `CSS = visual/0.
 **Future rule:**
 * **DO:** Let the page’s own `prefers-color-scheme` win. Set `WebEngineView.backgroundColor: "transparent"` or page `bg` if you need a placeholder.
 * **DO NOT:** Add `--force-dark-mode`, `--enable-force-dark` or `blink-settings=forceDarkModeEnabled` unless you are writing an explicit “force dark” toggle — it globally recolors and breaks `color-scheme`, `lab()`/`oklch()` and image fidelity on every profile (`qml/theme/Theme.qml` is dark, but web content is not).
-* **If you must darken:** Use `QWebEngineSettings::ForceDarkMode` per-profile or inject a page-level `filter: invert()` in a `WebEngineScript` with `injectionPoint: DocumentCreation` + `worldId: MainWorld`, not a process flag.
+* **If you must darken:** Use `QWebEngineSettings::ForceDarkMode` per-profile or inject a page-level `filter: invert()` in a `WebEngineScript` with `injectionPoint: DocumentCreation` + `worldId: MainWorld`, not a process flag. That explicit toggle now exists as the per-device content theme (see [ARCHITECTURE.md](ARCHITECTURE.md#device-content-theme)): it sets the attribute on the device's own `WebEngineView` and still adds no process-wide flag, so the rest of this section keeps holding.
 
 Check:
 ```bash

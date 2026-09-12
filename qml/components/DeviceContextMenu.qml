@@ -152,6 +152,105 @@ Popup {
             }
         }
 
+        // Web content theme. There are two states, not three: Qt WebEngine
+        // exposes Chromium's force-dark rendering per view but no per-view way
+        // to ask for a light scheme, so "System" and "Dark" are the only honest
+        // choices.
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 9
+            Layout.rightMargin: 9
+            Layout.topMargin: 2
+            Layout.bottomMargin: 5
+            spacing: 4
+            visible: root.device !== null
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                Text {
+                    text: "THEME"
+                    color: Theme.textFaint
+                    font.pixelSize: 10
+                    font.weight: Font.DemiBold
+                    font.letterSpacing: 1.2
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Text {
+                    text: root.device && root.device.contentTheme === "dark" ? "Dark" : "System"
+                    color: Theme.textMuted
+                    font.pixelSize: 10
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                Repeater {
+                    model: [
+                        {
+                            value: "system",
+                            label: "System",
+                            hint: "Follow the desktop colour scheme."
+                        },
+                        {
+                            value: "dark",
+                            label: "Dark",
+                            hint: "Chromium force-dark: pages that ignore dark mode render dark, "
+                                  + "while pages with their own dark styling keep it."
+                        }
+                    ]
+
+                    delegate: Rectangle {
+                        id: themeChip
+
+                        required property var modelData
+
+                        readonly property bool selected: root.device !== null
+                                                         && root.device.contentTheme === modelData.value
+
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 26
+                        radius: Theme.radiusSmall
+                        color: themeChip.selected ? Theme.accentSoft
+                                                  : chipMouse.containsMouse ? Theme.panelSoft : "transparent"
+                        border.width: 1
+                        border.color: themeChip.selected ? Theme.accentBorder : Theme.border
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: themeChip.modelData.label
+                            color: themeChip.selected ? Theme.text : Theme.textMuted
+                            font.pixelSize: 11
+                        }
+
+                        ToolTip {
+                            text: themeChip.modelData.hint
+                            visible: chipMouse.containsMouse
+                            delay: 400
+                        }
+
+                        MouseArea {
+                            id: chipMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (root.manager) {
+                                    root.manager.setDeviceContentTheme(root.deviceId,
+                                                                       themeChip.modelData.value)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1

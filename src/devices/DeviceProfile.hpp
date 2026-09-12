@@ -38,6 +38,13 @@ struct DeviceRecord
     QString url;
     // Empty means the device follows the application accent.
     QString accent;
+    // Whether the device was running when this record was last written. A
+    // record without the key predates persisted run state and loads stopped.
+    bool running = false;
+    // Web content theme: "dark" turns on Chromium's force-dark rendering for
+    // this device; anything else means "system". A record without the key
+    // predates the setting and loads as "system".
+    QString contentTheme;
 };
 
 QJsonObject deviceRecordToJson(const DeviceRecord& record);

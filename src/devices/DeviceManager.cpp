@@ -193,6 +193,15 @@ void DeviceManager::setDeviceAccent(const QString& id, const QString& accentName
     }
 }
 
+void DeviceManager::setDeviceContentTheme(const QString& id, const QString& theme)
+{
+    // Only "dark" and "system" survive normalization; the device emits
+    // dataChanged, which persists the device list.
+    if (auto* device = findById(id)) {
+        device->setContentTheme(theme);
+    }
+}
+
 void DeviceManager::selectDevice(const QString& id)
 {
     setSelectedDevice(findById(id));
@@ -234,8 +243,14 @@ void DeviceManager::load()
         // Set before the device joins the model so restoring a stored accent is
         // not mistaken for an edit worth persisting.
         device->setAccentName(record.accent);
+        device->setContentTheme(record.contentTheme);
         addDevice(device, false);
-        device->start();
+        // Devices keep the run state they were left in: a stopped device stays
+        // stopped and shows its stopped preview, and Hesh never starts the whole
+        // collection just because it launched.
+        if (record.running) {
+            device->start();
+        }
     }
 
     if (auto* saved = findById(m_settings->selectedDeviceId())) {
@@ -282,6 +297,8 @@ void DeviceManager::persist() const
         record.type = device->typeName();
         record.profileName = device->profileName();
         record.accent = device->accentName();
+        record.running = device->isRunning();
+        record.contentTheme = device->contentTheme();
         if (const auto* webDevice = qobject_cast<const WebDevice*>(device)) {
             record.url = webDevice->url();
         }

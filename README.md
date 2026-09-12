@@ -39,6 +39,16 @@ Implemented:
   (Hesh/Qt/Chromium versions, HiDPI rounding policy, effective browser flags).
   Everything applies immediately, persists through `QSettings`, and is
   reachable from the titlebar in both full and compact windows
+- Per-device web content theme: System (follow the desktop colour scheme) or
+  Dark (Chromium force-dark, applied to that device's view only), chosen from
+  the device's right-click menu and persisted with the device record. Reloading
+  the device applies a change. There is no per-device Light: Qt WebEngine has no
+  per-view colour-scheme override, and the application-wide setting that exists
+  would change every device at once
+- Device run state persists with the device record: stopping a device keeps it
+  stopped, and Hesh starts only the devices that were running when the state was
+  last written. Records written before this existed load stopped, so opening
+  Hesh never starts the whole collection
 - Per-device accent, chosen from the device's right-click menu: six presets plus
   "Follow App Accent", which is the default for every device. The sidebar card
   and the preview's loading states repaint immediately, and the choice persists
@@ -46,7 +56,8 @@ Implemented:
 - Core Qt Test coverage for creation, removal, clearing, clearing all devices,
   selection, profiles, persistence, preference defaults and round-trip, accent
   fallback, device accent storage and colour resolution, restart-required
-  tracking, and reset scope
+  tracking, run state round-trip and legacy records, device content theme
+  round-trip, and reset scope
 
 Not implemented yet:
 

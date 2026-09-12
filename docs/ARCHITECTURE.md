@@ -128,9 +128,47 @@ boundary. The model
 uses roles backed by actual `Device` objects, rather than two hardcoded device
 slots or a large collection of QVariant maps.
 
+Run state is part of a persisted record. `DeviceRecord.running` is written
+whenever a device starts or stops — not on exit — so a stopped device is already
+stopped in storage if the process is killed. Loading starts only the devices
+whose record says they were running; Hesh never starts the whole collection
+because it launched, and a record written before the flag existed has no
+`running` key and therefore loads stopped. A restored stopped device renders the
+frame's stopped state, which is what makes that state visible at startup instead
+of a preview that silently starts.
+
 Phase 1 supports the Web type. Android records are deliberately not created or
 emulated yet; the future type can be added without changing the manager's
 collection, selection, or model APIs.
+
+## Device content theme
+
+A device persists a web content theme: `system` (follow the desktop colour
+scheme) or `dark`. Qt WebEngine exposes Chromium's force-dark rendering as a
+per-view attribute — `QWebEngineSettings::ForceDarkMode`, surfaced in QML as
+`WebEngineView.settings.forceDarkMode` — so `dark` turns darkening on for that
+device's view and nothing else. `DeviceFrame` binds it to the device's stored
+value and reloads a running device once when the value changes, because a
+renderer setting only takes effect at the next paint of a loaded document.
+
+Two measured facts shape this:
+
+- **The desktop scheme reaches web content.** With the application colour scheme
+  forced light, `matchMedia('(prefers-color-scheme: dark)')` reports `false`; on a
+  `prefer-dark` desktop it reports `true`. `system` therefore is not "always
+  light" — a page that supports dark mode already renders dark here, and `dark`
+  adds Chromium's darkening for pages that ignore the scheme.
+- **Force dark is a paint-stage filter.** Computed styles keep reporting the
+  page's own colours (`rgb(255, 255, 255)`) while the rendered pixels are dark
+  (`#121212`), so nothing in the page can detect it. It needs no Chromium
+  command-line feature flag; the attribute alone is effective on Qt 6.11.
+
+There is deliberately no third "light" state. Qt WebEngine has no per-view
+override for the preferred colour scheme — the only lever is the application-wide
+`QStyleHints::setColorScheme()`, which would flip every device and the window's
+own rendering at once — and a stylesheet's `@media (prefers-color-scheme: …)`
+rules are evaluated by Blink, so a script cannot re-evaluate them for one view.
+A per-device "light" would be a control that lies about what it does.
 
 ## Profiles
 
