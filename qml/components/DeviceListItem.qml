@@ -21,10 +21,27 @@ Item {
     readonly property color accentColor: root.useDeviceAccent ? root.device.accent : Theme.accent
     readonly property color accentSoftColor: root.useDeviceAccent ? root.device.accentSoft : Theme.accentSoft
     readonly property color accentBorderColor: root.useDeviceAccent ? root.device.accentBorder : Theme.accentBorder
+    // Reordering. The card is translated with the pointer rather than moved, so
+    // the anchors that size it stay intact and the list does not reflow
+    // mid-drag: the sidebar holds one drop boundary and every row draws the
+    // insertion line for it.
+    property int dropIndex: -1
+    readonly property bool isDragging: dragHandler.active
+    readonly property bool showDropLineAbove: !root.isDragging && root.dropIndex === index
+    // The end-of-list boundary belongs under the last row only, or every row
+    // would draw it.
+    readonly property bool showDropLineBelow: {
+        const view = root.ListView.view
+        if (!view || root.isDragging || root.dropIndex < 0) return false
+        return index === view.count - 1 && root.dropIndex === view.count
+    }
     signal activated()
     signal openStandaloneRequested(var device)
     signal clearDataRequested(var device)
     signal deviceRemovalRequested(string deviceId)
+    signal dragStarted(string deviceId, int dropIndex)
+    signal dragUpdated(string deviceId, int dropIndex)
+    signal dragFinished(string deviceId)
 
     implicitHeight: 76
     width: ListView.view ? ListView.view.width : 220
@@ -35,10 +52,14 @@ Item {
         anchors.leftMargin: 10
         anchors.rightMargin: 10
         radius: Theme.radiusSmall
-        color: root.selected ? root.accentSoftColor
-                             : (rowMouseArea.containsMouse ? Theme.panelRaised : "transparent")
-        border.width: root.selected ? 1 : 0
-        border.color: root.accentBorderColor
+        z: root.isDragging ? 2 : 0
+        opacity: root.isDragging ? 0.92 : 1.0
+        transform: Translate { y: root.isDragging ? dragHandler.translation.y : 0 }
+        color: root.isDragging ? Theme.panelRaised
+                               : root.selected ? root.accentSoftColor
+                               : (rowMouseArea.containsMouse ? Theme.panelRaised : "transparent")
+        border.width: root.selected || root.isDragging ? 1 : 0
+        border.color: root.isDragging ? root.accentColor : root.accentBorderColor
 
         Rectangle {
             width: 3
@@ -114,6 +135,76 @@ Item {
                 }
             }
         }
+
+    }
+
+    // Insertion boundary under the pointer, in list terms: the row the device
+    // would land before, or the row count for the end of the list. indexAt uses
+    // view coordinates while item geometry is in content coordinates, so the
+    // pointer is mapped to the view and then offset by the scroll position. The
+    // pointer is clamped into the viewport first, so dragging past either edge
+    // targets the first or last visible row instead of jumping to an extreme of
+    // the whole list.
+    function contentDropIndex() {
+        const view = root.ListView.view
+        if (!view) return index
+        const point = root.mapToItem(view, 0, dragHandler.centroid.position.y)
+        const viewY = Math.max(1, Math.min(Math.max(1, view.height - 1), point.y))
+        const pointerContentY = view.contentY + viewY
+        const hovered = view.indexAt(10, viewY)
+        if (hovered < 0) return pointerContentY < 0 ? 0 : view.count
+        const item = view.itemAtIndex(hovered)
+        if (!item) return hovered
+        return (pointerContentY - item.y) > item.height / 2 ? hovered + 1 : hovered
+    }
+
+    // A plain pointer handler instead of Qt's drag-and-drop protocol: the drop
+    // target is a row boundary in the same list, so mapping the pointer to an
+    // index is the whole job, and the left button stays free for selection and
+    // the context menu until the drag threshold is crossed.
+    DragHandler {
+        id: dragHandler
+        acceptedButtons: Qt.LeftButton
+
+        onActiveChanged: {
+            if (active) {
+                const boundary = root.contentDropIndex()
+                root.dragStarted(root.deviceId, boundary)
+                root.dragUpdated(root.deviceId, boundary)
+            } else {
+                root.dragFinished(root.deviceId)
+            }
+        }
+
+        onTranslationChanged: {
+            if (active) root.dragUpdated(root.deviceId, root.contentDropIndex())
+        }
+    }
+
+    Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 14
+        anchors.rightMargin: 14
+        y: -1
+        height: 2
+        radius: 1
+        z: 4
+        color: Theme.accent
+        visible: root.showDropLineAbove
+    }
+
+    Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 14
+        anchors.rightMargin: 14
+        y: root.height - 1
+        height: 2
+        radius: 1
+        z: 4
+        color: Theme.accent
+        visible: root.showDropLineBelow
     }
 
     DeviceContextMenu {

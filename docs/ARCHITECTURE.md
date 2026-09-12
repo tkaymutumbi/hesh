@@ -137,6 +137,24 @@ because it launched, and a record written before the flag existed has no
 frame's stopped state, which is what makes that state visible at startup instead
 of a preview that silently starts.
 
+List order is the record order, so a reorder is a data change rather than a view
+concern. Dragging a device in the sidebar calls `DeviceManager::moveDevice()`,
+which clamps the drop position, resolves it against the dragged row, moves the
+row through `beginMoveRows`/`endMoveRows` — so the view moves delegates instead of
+rebuilding them — and persists the whole list in its new order. Drop positions
+are insertion boundaries, not row indexes: dragging a row onto its own boundary,
+or the one just after it, is a no-op rather than a shuffle, which is what makes a
+drag that ends where it started harmless. `DeviceListModel::moveDevice()` takes
+indexes in the resulting order and converts to the destination row
+`beginMoveRows` expects.
+
+The interaction is deliberately a translated card plus a drop line rather than a
+list that reflows during the drag. Live reflow would move the dragged delegate
+under the pointer as the model reorders, and keeping it pinned under the cursor
+then means compensating for the model's own movement on every step; the sidebar
+is short enough that an explicit insertion line communicates the drop better, and
+the card's anchors stay intact because only a `Translate` transform is applied.
+
 Phase 1 supports the Web type. Android records are deliberately not created or
 emulated yet; the future type can be added without changing the manager's
 collection, selection, or model APIs.

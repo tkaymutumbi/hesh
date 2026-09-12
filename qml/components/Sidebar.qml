@@ -9,6 +9,11 @@ Rectangle {
 
     property var manager
     property var standaloneDeviceIds: ({})
+    // Reordering state lives here rather than in each row: exactly one device is
+    // dragged at a time, and every row needs the same insertion boundary to draw
+    // its line.
+    property string draggedDeviceId: ""
+    property int dropBoundary: -1
     signal addDeviceRequested()
     signal openStandaloneRequested(var device)
     signal clearDataRequested(var device)
@@ -58,9 +63,25 @@ Rectangle {
             delegate: DeviceListItem {
                 manager: root.manager
                 standalone: root.standaloneDeviceIds[deviceId] === true
+                dropIndex: root.draggedDeviceId.length > 0 ? root.dropBoundary : -1
                 selected: root.manager && root.manager.selectedDevice
                           && root.manager.selectedDevice.id === deviceId
                 onActivated: if (root.manager) root.manager.selectDevice(deviceId)
+                onDragStarted: (draggedId, boundary) => {
+                    root.draggedDeviceId = draggedId
+                    root.dropBoundary = boundary
+                }
+                onDragUpdated: (draggedId, boundary) => {
+                    if (root.draggedDeviceId === draggedId) root.dropBoundary = boundary
+                }
+                onDragFinished: (draggedId) => {
+                    const target = root.dropBoundary
+                    root.draggedDeviceId = ""
+                    root.dropBoundary = -1
+                    // The order is part of the device records, so the manager
+                    // persists it as soon as the row lands.
+                    if (root.manager && draggedId) root.manager.moveDevice(draggedId, target)
+                }
                 onOpenStandaloneRequested: (selectedDevice) => root.openStandaloneRequested(selectedDevice)
                 onClearDataRequested: (selectedDevice) => root.clearDataRequested(selectedDevice)
                 onDeviceRemovalRequested: (removedDeviceId) => root.deviceRemovalRequested(removedDeviceId)

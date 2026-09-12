@@ -34,6 +34,7 @@ private slots:
     void deviceRunStatePersists();
     void legacyDeviceRecordsLoadStopped();
     void deviceContentThemePersists();
+    void moveDeviceReorders();
     void restartRequiredTracksEdits();
     void resetPreferencesKeepsDevices();
 };
@@ -494,6 +495,61 @@ void DeviceTests::deviceContentThemePersists()
     DeviceManager reloadedAgain(&again);
     reloadedAgain.selectDevice(darkId);
     QCOMPARE(reloadedAgain.selectedDevice()->contentTheme(), QStringLiteral("system"));
+}
+
+void DeviceTests::moveDeviceReorders()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto settingsPath = directory.filePath(QStringLiteral("settings.ini"));
+
+    Settings settings(QStringLiteral("HeshTests"), QStringLiteral("Reorder"), settingsPath);
+    DeviceManager manager(&settings);
+    auto* first = manager.createWebDevice(QStringLiteral("A"), QStringLiteral("Pixel 7"), {});
+    auto* second = manager.createWebDevice(QStringLiteral("B"), QStringLiteral("Pixel 7"), {});
+    auto* third = manager.createWebDevice(QStringLiteral("C"), QStringLiteral("Pixel 7"), {});
+    QVERIFY(first != nullptr);
+    QVERIFY(second != nullptr);
+    QVERIFY(third != nullptr);
+
+    QAbstractListModel* model = manager.devices();
+    const auto nameAt = [model](int row) {
+        return model->data(model->index(row), DeviceListModel::DeviceNameRole).toString();
+    };
+    QCOMPARE(nameAt(0), QStringLiteral("A"));
+    QCOMPARE(nameAt(1), QStringLiteral("B"));
+    QCOMPARE(nameAt(2), QStringLiteral("C"));
+
+    // Target indexes are insertion boundaries, the way a drop position reads:
+    // dragging the last device above the first one moves it to the front.
+    manager.moveDevice(third->id(), 0);
+    QCOMPARE(nameAt(0), QStringLiteral("C"));
+    QCOMPARE(nameAt(1), QStringLiteral("A"));
+    QCOMPARE(nameAt(2), QStringLiteral("B"));
+
+    // Dropping a device onto its own boundary, or the one just after it, is a
+    // no-op rather than a shuffle.
+    manager.moveDevice(first->id(), 1);
+    manager.moveDevice(first->id(), 2);
+    QCOMPARE(nameAt(1), QStringLiteral("A"));
+
+    // An unknown device is ignored, and an out-of-range boundary lands at the end.
+    manager.moveDevice(QStringLiteral("missing-device"), 0);
+    QCOMPARE(nameAt(0), QStringLiteral("C"));
+    manager.moveDevice(first->id(), 99);
+    QCOMPARE(nameAt(2), QStringLiteral("A"));
+
+    // The order is part of the persisted records, not just the live model.
+    Settings reloadedSettings(QStringLiteral("HeshTests"), QStringLiteral("Reorder"), settingsPath);
+    DeviceManager reloaded(&reloadedSettings);
+    QCOMPARE(reloaded.deviceCount(), 3);
+    QAbstractListModel* reloadedModel = reloaded.devices();
+    const auto reloadedNameAt = [reloadedModel](int row) {
+        return reloadedModel->data(reloadedModel->index(row), DeviceListModel::DeviceNameRole).toString();
+    };
+    QCOMPARE(reloadedNameAt(0), QStringLiteral("C"));
+    QCOMPARE(reloadedNameAt(1), QStringLiteral("B"));
+    QCOMPARE(reloadedNameAt(2), QStringLiteral("A"));
 }
 
 void DeviceTests::restartRequiredTracksEdits()

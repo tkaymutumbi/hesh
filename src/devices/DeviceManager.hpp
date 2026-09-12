@@ -37,6 +37,9 @@ public:
 
     void insertDevice(int row, Device* device);
     void removeDevice(int row);
+    // Moves a row to a new index in the resulting order. The view is notified
+    // through beginMoveRows/endMoveRows so delegates move instead of rebuilding.
+    void moveDevice(int from, int to);
     Device* at(int row) const;
     int indexOf(const Device* device) const;
 
@@ -68,6 +71,10 @@ public:
     Q_INVOKABLE void clearAllDeviceData();
     Q_INVOKABLE void setDeviceAccent(const QString& id, const QString& accentName);
     Q_INVOKABLE void setDeviceContentTheme(const QString& id, const QString& theme);
+    // Moves a device to an insertion boundary in the list: targetIndex counts
+    // the boundaries between rows, so a value equal to the row count moves the
+    // device to the end. Dropping a device onto its own boundary is a no-op.
+    Q_INVOKABLE void moveDevice(const QString& id, int targetIndex);
     Q_INVOKABLE void selectDevice(const QString& id);
     Q_INVOKABLE void startDevice(const QString& id);
     Q_INVOKABLE void stopDevice(const QString& id);

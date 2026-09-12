@@ -39,6 +39,10 @@ Implemented:
   (Hesh/Qt/Chromium versions, HiDPI rounding policy, effective browser flags).
   Everything applies immediately, persists through `QSettings`, and is
   reachable from the titlebar in both full and compact windows
+- Reorder devices by dragging them in the sidebar: the card follows the pointer,
+  a drop line marks where it will land, and the order is part of the persisted
+  device records, so it survives a restart. Dropping a device where it already
+  was changes nothing
 - Per-device web content theme: System (follow the desktop colour scheme) or
   Dark (Chromium force-dark, applied to that device's view only), chosen from
   the device's right-click menu and persisted with the device record. Reloading
@@ -57,7 +61,7 @@ Implemented:
   selection, profiles, persistence, preference defaults and round-trip, accent
   fallback, device accent storage and colour resolution, restart-required
   tracking, run state round-trip and legacy records, device content theme
-  round-trip, and reset scope
+  round-trip, device reordering, and reset scope
 
 Not implemented yet:
 

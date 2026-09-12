@@ -3,6 +3,8 @@
 #include <QDebug>
 #include <QUuid>
 
+#include <algorithm>
+
 #include "app/Settings.hpp"
 #include "web/WebDevice.hpp"
 
@@ -85,6 +87,21 @@ void DeviceListModel::removeDevice(int row)
 Device* DeviceListModel::at(int row) const
 {
     return row >= 0 && row < m_devices.size() ? m_devices.at(row) : nullptr;
+}
+
+void DeviceListModel::moveDevice(int from, int to)
+{
+    if (from == to || from < 0 || from >= m_devices.size() || to < 0 || to >= m_devices.size()) {
+        return;
+    }
+    // beginMoveRows takes the row the moved rows are inserted before, in
+    // pre-move coordinates: moving down has to point one past the target.
+    const int destination = to > from ? to + 1 : to;
+    if (!beginMoveRows({}, from, from, {}, destination)) {
+        return;
+    }
+    m_devices.move(from, to);
+    endMoveRows();
 }
 
 int DeviceListModel::indexOf(const Device* device) const
@@ -191,6 +208,26 @@ void DeviceManager::setDeviceAccent(const QString& id, const QString& accentName
     if (auto* device = findById(id)) {
         device->setAccentName(accentName);
     }
+}
+
+void DeviceManager::moveDevice(const QString& id, int targetIndex)
+{
+    auto* device = findById(id);
+    if (!device) {
+        return;
+    }
+    const int from = m_model.indexOf(device);
+    if (from < 0) {
+        return;
+    }
+    // The boundary counts rows in the list as it looks now, including the row
+    // being dragged, so dropping in place or just after itself changes nothing.
+    const int boundary = std::clamp(targetIndex, 0, m_model.rowCount());
+    if (boundary == from || boundary == from + 1) {
+        return;
+    }
+    m_model.moveDevice(from, boundary > from ? boundary - 1 : boundary);
+    persist();
 }
 
 void DeviceManager::setDeviceContentTheme(const QString& id, const QString& theme)
