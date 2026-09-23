@@ -281,13 +281,17 @@ void DeviceManager::load()
         // not mistaken for an edit worth persisting.
         device->setAccentName(record.accent);
         device->setContentTheme(record.contentTheme);
+        // Restore run state before connecting Device::dataChanged. Starting a
+        // saved device emits dataChanged; persisting that during load would
+        // overwrite selectedDeviceId with an empty value before the saved
+        // selection below has been restored.
+        if (record.running) {
+            device->start();
+        }
         addDevice(device, false);
         // Devices keep the run state they were left in: a stopped device stays
         // stopped and shows its stopped preview, and Hesh never starts the whole
         // collection just because it launched.
-        if (record.running) {
-            device->start();
-        }
     }
 
     if (auto* saved = findById(m_settings->selectedDeviceId())) {

@@ -100,8 +100,11 @@ Popup {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    root.reloadRequested()
                     root.close()
+                    // Release the popup's pointer grab before reloading its
+                    // WebEngineView. Reloading while this menu still owns the
+                    // click can race the standalone surface's focus recovery.
+                    Qt.callLater(function() { root.reloadRequested() })
                 }
             }
         }

@@ -346,6 +346,9 @@ Item {
         if (!webView || !root.profileReady || !root.device) return
 
         webView.lifecycleState = WebEngineView.LifecycleState.Active
+        // A reload is already producing a new surface. Avoid injecting the
+        // repaint JavaScript into the same WebContents during navigation.
+        if (root.pageLoading) return
 
         var currentUrl = webView.url.toString()
         if (currentUrl === "" || currentUrl === "about:blank") {
