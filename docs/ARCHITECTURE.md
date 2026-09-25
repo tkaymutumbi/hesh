@@ -1,6 +1,6 @@
 # Hesh architecture
 
-This document describes Hesh **0.1.5**.
+This document describes Hesh **0.1.6**.
 
 Hesh keeps the QML presentation layer separate from the C++ application and
 device infrastructure.

@@ -14,6 +14,7 @@
 #include "app/Application.hpp"
 #include "app/Preferences.hpp"
 #include "devices/Device.hpp"
+#include "web/BrowserProfiles.hpp"
 #include "web/WebDevice.hpp"
 
 int main(int argc, char* argv[])
@@ -76,6 +77,9 @@ int main(int argc, char* argv[])
     // Preferences are read from unrelated corners of the tree, so they are a
     // singleton rather than another context property.
     qmlRegisterSingletonInstance("Hesh", 1, 0, "Preferences", hesh.preferences());
+
+    Hesh::BrowserProfiles browserProfiles;
+    qmlRegisterSingletonInstance("Hesh", 1, 0, "BrowserProfiles", &browserProfiles);
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("deviceManager"), hesh.deviceManager());

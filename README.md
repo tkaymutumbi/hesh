@@ -10,7 +10,7 @@ storage, IndexedDB, and disk cache, previewed at a logical viewport size and
 device pixel ratio. Devices can be previewed in the main workspace or opened as
 independent windows the compositor can tile and move.
 
-Current version: **0.1.5** (pre-release)
+Current version: **0.1.6** (pre-release)
 
 ## Status
 

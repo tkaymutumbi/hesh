@@ -159,30 +159,34 @@ Item {
             + " return true; } catch(e){ return false; } })()")
     }
 
+    // Standalone hosts inspect the page from their own DevTools window.
+    readonly property alias pageView: webView
+    // DevTools has its own preference store. Chromium's process theme and
+    // WebEngineSettings.forceDarkMode do not reliably select this setting.
+    // Modern DevTools is built from ES modules and no longer exposes a global
+    // settings object, and the legacy host preference is ignored at startup.
+    // Import the frontend's settings module by absolute URL (a relative import
+    // fails from an injected script) and set its theme; it applies live.
+    readonly property string devToolsDarkThemeScript:
+        "import('devtools://devtools/bundled/core/common/common.js').then(C => {" +
+        "  const s = C.Settings.Settings.instance();" +
+        "  let t;" +
+        "  try { t = s.moduleSetting('ui-theme'); }" +
+        "  catch (_) { t = s.createSetting('ui-theme', 'systemPreferred'); }" +
+        "  if (t.get() !== 'dark') t.set('dark');" +
+        "}).catch(() => {})"
+
     function applyDevToolsDarkTheme() {
         if (!root.showDevTools || root.devToolsThemeApplied
                 || devToolsView.loading || devToolsView.url.toString() === "") {
             return
         }
 
-        // DevTools has its own preference store. Chromium's process theme and
-        // WebEngineSettings.forceDarkMode do not reliably select this setting.
-        devToolsView.runJavaScript(
-            "(() => {" +
-            "  try {" +
-            "    const settings = globalThis.Common?.settings ?? " +
-            "      globalThis.Common?.Settings?.Settings?.instance?.();" +
-            "    if (!settings) return false;" +
-            "    let theme;" +
-            "    try { theme = settings.moduleSetting('uiTheme'); } catch (_) {}" +
-            "    theme ||= settings.createSetting('uiTheme', 'systemPreferred');" +
-            "    if (theme.get() !== 'dark') theme.set('dark');" +
-            "    return theme.get() === 'dark';" +
-            "  } catch (_) { return false; }" +
-            "})()",
-            function(applied) {
-                root.devToolsThemeApplied = applied === true
-            })
+        devToolsView.runJavaScript(root.devToolsDarkThemeScript)
+        // No result callback: Qt WebEngine delivers it through the QML engine
+        // and can do so after the view is torn down, which segfaults in
+        // QJSEngine::create. The script is idempotent, so the retry timer runs
+        // it a bounded number of times instead of waiting for an answer.
     }
 
     onShowDevToolsChanged: {
@@ -207,7 +211,10 @@ Item {
         onTriggered: {
             root.devToolsThemeAttempts++
             root.applyDevToolsDarkTheme()
-            if (root.devToolsThemeApplied || root.devToolsThemeAttempts >= 40) stop()
+            if (root.devToolsThemeAttempts >= 12) {
+                root.devToolsThemeApplied = true
+                stop()
+            }
         }
     }
 
@@ -289,10 +296,51 @@ Item {
         root.pageError = ""
         webView.lifecycleState = WebEngineView.LifecycleState.Active
 
-        if (bypassCache && typeof webView.reloadAndBypassCache === "function")
+        // A renderer that died or was discarded while the app sat idle ignores
+        // reload(); navigating again spawns a fresh one.
+        if (webView.renderProcessPid === 0 || webView.url.toString() === "about:blank")
+            root.navigateFresh()
+        else if (bypassCache && typeof webView.reloadAndBypassCache === "function")
             webView.reloadAndBypassCache()
         else
             webView.reload()
+        root.reloadRetried = false
+        reloadWatchdog.restart()
+    }
+
+    // Re-installing the url binding makes WebEngineView load it again, even
+    // when the value is unchanged, and keeps the stopped-device pinning.
+    function navigateFresh() {
+        webView.url = Qt.binding(function() {
+            return root.profileReady && root.device && root.device.status === "Running"
+                    ? root.device.url : "about:blank"
+        })
+    }
+
+    // reload() can be silently dropped by a stale WebContents. If Chromium
+    // never reports the load starting, pageLoading stays latched and blocks
+    // every later surface recovery, so retry once by navigating, then give up
+    // visibly with the Retry button instead of spinning forever.
+    property bool reloadRetried: false
+    Timer {
+        id: reloadWatchdog
+        interval: 3000
+        repeat: false
+        onTriggered: {
+            if (!root.pageLoading || root.pageLoaded || !root.device) return
+            if (webView.loading && webView.loadProgress > 0) return
+            if (!root.reloadRetried) {
+                root.reloadRetried = true
+                webView.stop()
+                webView.lifecycleState = WebEngineView.LifecycleState.Active
+                root.navigateFresh()
+                restart()
+            } else {
+                root.pageLoading = false
+                root.pageFailed = true
+                root.pageError = "Reload did not start"
+            }
+        }
     }
 
     // Turns a raw Chromium/Qt WebEngine load failure into copy a device
@@ -305,7 +353,7 @@ Item {
         if (text.indexOf("renderer crashed") >= 0)
             return { kicker: "PREVIEW CRASHED", title: "The preview process stopped", detail: "Hesh is restarting it automatically." }
         if (text.indexOf("webengine profile") >= 0)
-            return { kicker: "PREVIEW UNAVAILABLE", title: "The device browser is busy", detail: "Another surface still owns this device's browser data. Close the other window, then retry." }
+            return { kicker: "PREVIEW UNAVAILABLE", title: "The device browser is busy", detail: "Another window still holds this device's browser data. Close it, then retry." }
         if (text.indexOf("err_internet_disconnected") >= 0)
             return { kicker: "CAN'T CONNECT", title: "No network connection", detail: "This machine appears to be offline. Check the connection and try again." }
         if (text.indexOf("err_name_not_resolved") >= 0)
@@ -406,7 +454,7 @@ Item {
         root.pageFailed = false
         root.pageError = ""
         if (root.profileReady && root.device) {
-            var p = deviceProfile.instance()
+            var p = BrowserProfiles.profileFor(root.device)
             if (p && root.device.userAgent) p.httpUserAgent = root.device.userAgent
             root.syncDevicePixelRatio()
         }
@@ -416,43 +464,62 @@ Item {
         if (root.profileReady) root.syncDevicePixelRatio()
     }
 
-    // Every device gets its own browser profile. This keeps localStorage,
-    // IndexedDB, cookies and cache isolated and available after a reload.
-    WebEngineProfilePrototype {
-        id: deviceProfile
-        storageName: root.device ? "hesh-device-" + root.device.id : "hesh-device-preview"
-        // The device owns the storage layout, so the profile and the
-        // clear-data operation can never disagree about the directories.
-        persistentStoragePath: root.device ? root.device.persistentStoragePath : ""
-        cachePath: root.device ? root.device.cachePath : ""
-        httpCacheType: WebEngineProfile.DiskHttpCache
-        persistentCookiesPolicy: WebEngineProfile.ForcePersistentCookies
-    }
+    // Every device owns one long-lived browser profile (BrowserProfiles), so
+    // localStorage, IndexedDB, cookies and cache stay isolated per device and
+    // every host of the device shares them. Creation should not fail; if it
+    // does, retry briefly before reporting it.
+    property int profileAttempts: 0
 
-    Component.onCompleted: {
+    function bindProfile() {
+        if (root.profileReady) return true
+        root.profileAttempts++
         // Assign after construction; assigning instance() through a binding
         // during WebEngineView creation can crash Qt WebEngine on Wayland.
-        var profile = deviceProfile.instance()
+        var profile = BrowserProfiles.profileFor(root.device)
         if (!profile) {
-            // The prototype refuses to build a profile while another live
-            // profile still owns the same data path. Keep the placeholder
-            // instead of attaching a null profile to the view, and say so on
-            // the screen rather than spinning forever.
-            console.warn("Hesh could not create a WebEngine profile for device",
-                         root.device ? root.device.id : "<none>")
-            root.pageFailed = true
-            root.pageError = "WebEngine profile unavailable"
-            return
+            if (root.profileAttempts < 40) {
+                profileRetryTimer.restart()
+            } else {
+                console.warn("Hesh could not create a WebEngine profile for device",
+                             root.device ? root.device.id : "<none>")
+                root.pageFailed = true
+                root.pageError = "WebEngine profile unavailable"
+            }
+            return false
         }
         if (root.device && root.device.userAgent) {
             profile.httpUserAgent = root.device.userAgent
         }
         webView.profile = profile
+        root.pageFailed = false
+        root.pageError = ""
         root.profileReady = true
         // On Wayland the first frame can be black until the view is
         // explicitly activated; force Active once the profile is bound.
         if (webView) webView.lifecycleState = WebEngineView.LifecycleState.Active
+        return true
     }
+
+    Timer {
+        id: profileRetryTimer
+        interval: 250
+        repeat: false
+        onTriggered: root.bindProfile()
+    }
+
+    // The Retry button: without a profile there is nothing to reload yet.
+    function retry() {
+        if (root.profileReady) {
+            root.reloadPage(false)
+        } else {
+            root.profileAttempts = 0
+            root.pageFailed = false
+            root.pageError = ""
+            root.bindProfile()
+        }
+    }
+
+    Component.onCompleted: root.bindProfile()
 
     Component.onDestruction: {
         // Stop any pending load so the shared profile isn't kept busy
@@ -721,7 +788,7 @@ Item {
                             visible: root.frameState === "error"
                             text: "Retry"
                             compact: true
-                            onClicked: root.reloadPage(false)
+                            onClicked: root.retry()
                         }
 
                         AppButton {

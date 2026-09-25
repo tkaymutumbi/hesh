@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Hesh
-    VERSION 0.1.5
+    VERSION 0.1.6
     DESCRIPTION "A lightweight device development and emulation environment"
     LANGUAGES CXX
 )
@@ -53,6 +53,8 @@ target_link_libraries(hesh_core
 
 qt_add_executable(hesh
     src/main.cpp
+    src/web/BrowserProfiles.cpp
+    src/web/BrowserProfiles.hpp
 )
 
 target_link_libraries(hesh

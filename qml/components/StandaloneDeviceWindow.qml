@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import QtWebEngine
 import Hesh 1.0
 
 pragma ComponentBehavior: Bound
@@ -17,6 +18,9 @@ Window {
     property bool browserSurfaceReleased: false
     readonly property bool browserSurfaceActive: browserLoader.active
     property bool suppressCloseSignal: false
+    // DevTools opens as its own top-level window so Hyprland can tile it next
+    // to the device instead of resizing the device's viewport.
+    property bool devToolsOpen: false
     // Window dimensions are device-independent pixels. Use the compositor's
     // available work area (which excludes reserved bars/panels) and never
     // enlarge the logical viewport; upscaling the WebEngine surface is what
@@ -95,6 +99,46 @@ Window {
         }
     }
 
+    // An unfocused standalone surface can stay black until the pointer moves
+    // over it: Chromium only submits a fresh frame when something asks it to.
+    // Ask on every event that can expose the window without focusing it
+    // (workspace switch, tiling resize, output change, a load finishing in the
+    // background), and ask twice, since the first pass can land before
+    // Hyprland has mapped the new buffer.
+    function scheduleSurfaceRecovery() {
+        surfaceRecoveryTimer.passes = 0
+        surfaceRecoveryTimer.interval = 60
+        surfaceRecoveryTimer.restart()
+    }
+
+    Timer {
+        id: surfaceRecoveryTimer
+        property int passes: 0
+        repeat: false
+        onTriggered: {
+            var f = browserLoader.item
+            if (!root.visible || !f || !f.recoverSurface) return
+            f.recoverSurface()
+            if (++passes < 2) {
+                interval = 400
+                restart()
+            }
+        }
+    }
+
+    onVisibilityChanged: root.scheduleSurfaceRecovery()
+    onScreenChanged: root.scheduleSurfaceRecovery()
+    onWidthChanged: root.scheduleSurfaceRecovery()
+    onHeightChanged: root.scheduleSurfaceRecovery()
+
+    Connections {
+        target: browserLoader.item
+        ignoreUnknownSignals: true
+        function onPageLoadedChanged() {
+            if (browserLoader.item && browserLoader.item.pageLoaded) root.scheduleSurfaceRecovery()
+        }
+    }
+
     // A standalone device has no DeviceWorkspace, so provide the same browser
     // shortcuts here. Ctrl+Shift+R bypasses the profile disk cache.
     Shortcut {
@@ -124,6 +168,7 @@ Window {
     }
 
     onClosing: function(closeEvent) {
+        root.devToolsOpen = false
         releaseBrowserSurface()
         if (!root.suppressCloseSignal) root.closedByUser(root.deviceId)
     }
@@ -196,12 +241,60 @@ Window {
             device: root.device
             canGoBack: browserLoader.item ? browserLoader.item.canGoBack : false
             canGoForward: browserLoader.item ? browserLoader.item.canGoForward : false
+            devToolsOpen: root.devToolsOpen
+            onDevToolsRequested: root.devToolsOpen = !root.devToolsOpen
             onReloadRequested: if (browserLoader.item) browserLoader.item.reloadPage(false)
             onBackRequested: if (browserLoader.item) browserLoader.item.goBack()
             onForwardRequested: if (browserLoader.item) browserLoader.item.goForward()
             onOpenBrowserRequested: (url) => Qt.openUrlExternally(url)
             onMainWindowRequested: root.mainWindowRequested(root.deviceId)
             onCloseRequested: root.close()
+        }
+    }
+
+    Window {
+        id: devToolsWindow
+        // Only attach while shown: an invisible attached DevTools view still
+        // draws Chromium's inspector overlays into the page.
+        readonly property var inspected: root.devToolsOpen && browserLoader.item
+                                         ? browserLoader.item.pageView : null
+        visible: inspected !== null
+        transientParent: null
+        flags: Qt.Window
+        title: (root.device ? root.device.name : "Device") + " DevTools — Hesh"
+        color: Theme.panelRaised
+        width: 720
+        height: Math.max(480, root.height)
+
+        onClosing: root.devToolsOpen = false
+
+        WebEngineView {
+            id: standaloneDevTools
+            anchors.fill: parent
+            inspectedView: devToolsWindow.inspected
+            backgroundColor: Theme.panelRaised
+            onLoadingChanged: function(loadRequest) {
+                if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                    devToolsThemeTimer.attempts = 0
+                    devToolsThemeTimer.restart()
+                }
+            }
+        }
+
+        // The DevTools frontend builds its settings store after load, so the
+        // idempotent dark-theme script is repeated for a short while.
+        Timer {
+            id: devToolsThemeTimer
+            property int attempts: 0
+            interval: 150
+            repeat: true
+            onTriggered: {
+                if (!devToolsWindow.visible || !browserLoader.item || ++attempts > 12) {
+                    stop()
+                    return
+                }
+                standaloneDevTools.runJavaScript(browserLoader.item.devToolsDarkThemeScript)
+            }
         }
     }
 }

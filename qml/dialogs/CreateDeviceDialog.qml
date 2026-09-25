@@ -207,9 +207,12 @@ Popup {
                     font.pixelSize: 11
                 }
 
-                Item { Layout.fillWidth: true }
-
+                // The user agent is a single long line. Without a width cap its
+                // implicit width widens the whole layout past the dialog edge.
                 Text {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    horizontalAlignment: Text.AlignRight
                     text: profileCombo.currentIndex >= 0 && root.manager
                           ? root.manager.availableProfiles[profileCombo.currentIndex].userAgent.split(" Chrome")[0]
                           : ""

@@ -12,8 +12,10 @@ Popup {
     property var device: null
     property bool canGoBack: false
     property bool canGoForward: false
+    property bool devToolsOpen: false
 
     signal reloadRequested()
+    signal devToolsRequested()
     signal backRequested()
     signal forwardRequested()
     signal openBrowserRequested(string url)
@@ -105,6 +107,39 @@ Popup {
                     // WebEngineView. Reloading while this menu still owns the
                     // click can race the standalone surface's focus recovery.
                     Qt.callLater(function() { root.reloadRequested() })
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            color: Theme.border
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 30
+            radius: 5
+            color: root.itemColor(devToolsMouse, true)
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: 9
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.devToolsOpen ? "Hide DevTools" : "DevTools"
+                color: Theme.text
+                font.pixelSize: 12
+            }
+
+            MouseArea {
+                id: devToolsMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    root.close()
+                    Qt.callLater(function() { root.devToolsRequested() })
                 }
             }
         }
