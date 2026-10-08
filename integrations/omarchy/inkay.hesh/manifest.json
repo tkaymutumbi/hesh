@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "inkay.hesh",
+  "name": "Hesh Devices",
+  "version": "0.1.0",
+  "author": "inkay",
+  "license": "MIT",
+  "description": "Manage Hesh devices from the bar without opening the main app.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {"barWidget": "BarWidget.qml"},
+  "barWidget": {
+    "displayName": "Hesh Devices",
+    "description": "Device controls, URLs and previews in a bar popup.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {},
+    "schema": []
+  }
+}

@@ -9,3 +9,6 @@ CMakeCache.txt
 CMakeFiles/
 Testing/
 file:/
+
+__pycache__/
+*.pyc

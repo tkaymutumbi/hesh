@@ -67,6 +67,10 @@ Window {
         }
     }
 
+    function reloadPage() {
+        if (browserLoader.item) browserLoader.item.reloadPage()
+    }
+
     function focusWindow() {
         if (!root.visible) {
             root.show()
@@ -146,6 +150,13 @@ Window {
         context: Qt.ApplicationShortcut
         enabled: root.visible && browserLoader.item !== null
         onActivated: browserLoader.item.reloadPage(false)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+S"
+        context: Qt.ApplicationShortcut
+        enabled: root.visible && browserLoader.item !== null
+        onActivated: browserLoader.item.takeScreenshot()
     }
 
     Shortcut {
@@ -244,6 +255,7 @@ Window {
             devToolsOpen: root.devToolsOpen
             onDevToolsRequested: root.devToolsOpen = !root.devToolsOpen
             onReloadRequested: if (browserLoader.item) browserLoader.item.reloadPage(false)
+            onScreenshotRequested: if (browserLoader.item) browserLoader.item.takeScreenshot()
             onBackRequested: if (browserLoader.item) browserLoader.item.goBack()
             onForwardRequested: if (browserLoader.item) browserLoader.item.goForward()
             onOpenBrowserRequested: (url) => Qt.openUrlExternally(url)

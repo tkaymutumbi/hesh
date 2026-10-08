@@ -8,7 +8,7 @@ pragma ComponentBehavior: Bound
 ApplicationWindow {
     id: window
 
-    visible: true
+    visible: !backgroundLaunch
     width: 1240
     height: 780
     minimumWidth: 360
@@ -17,6 +17,29 @@ ApplicationWindow {
     flags: Qt.Window | Qt.FramelessWindowHint
     title: "Hesh"
 
+    Shortcut {
+        sequence: "Ctrl+Alt+P"
+        context: Qt.ApplicationShortcut
+        onActivated: Automation.paused = !Automation.paused
+    }
+
+    property bool backgroundMode: backgroundLaunch
+    function enableBackground() { backgroundMode = true }
+    function showMainWindow() { show(); raise(); requestActivate() }
+    function showLogins() { showMainWindow(); credentialsDialog.open() }
+    function previewDevice(id) {
+        deviceManager.selectDevice(id)
+        openStandaloneForDevice(deviceManager.selectedDevice)
+    }
+    function removeDeviceById(id) {
+        closeStandaloneForDevice(id)
+        deviceManager.removeDevice(id)
+    }
+    function reloadDevice(id) {
+        var host = standaloneWindows[id]
+        if (host) host.reloadPage()
+        else if (deviceManager.selectedDevice && deviceManager.selectedDevice.id === id) workspace.reloadPage()
+    }
     property bool maximized: false
     readonly property bool compactWindow: width < 760
     // The workspace's application-level shortcuts stay armed while a modal
@@ -24,6 +47,7 @@ ApplicationWindow {
     readonly property bool modalDialogOpen: createDeviceDialog.opened
                                             || clearDataDialog.opened
                                             || settingsDialog.opened
+                                            || credentialsDialog.opened
 
     // The palette is a plain value holder; the stored accent is pushed into it
     // from the one file that owns the window.
@@ -179,8 +203,7 @@ ApplicationWindow {
             })
             host.mainWindowRequested.connect(function(requestedId) {
                 window.finishStandalone(requestedId || deviceId, host)
-                window.raise()
-                window.requestActivate()
+                window.showMainWindow()
             })
             host.show()
             host.focusWindow()
@@ -204,7 +227,13 @@ ApplicationWindow {
         // transient browser surface during application teardown.
     }
 
-    onClosing: {
+    onClosing: (event) => {
+        if (backgroundMode) {
+            event.accepted = false
+            hide()
+            return
+        }
+        Qt.quit()
         window.shuttingDown = true
         window.closeAllStandaloneWindows()
     }
@@ -299,6 +328,13 @@ ApplicationWindow {
                     }
 
                     AppButton {
+                        text: "Logins"
+                        compact: true
+                        secondary: true
+                        onClicked: credentialsDialog.open()
+                    }
+
+                    AppButton {
                         text: "Settings"
                         compact: true
                         secondary: true
@@ -366,6 +402,7 @@ ApplicationWindow {
                     }
 
                     DeviceWorkspace {
+                        id: workspace
                         anchors.fill: parent
                         visible: deviceManager.deviceCount > 0
                         manager: deviceManager
@@ -394,6 +431,16 @@ ApplicationWindow {
         id: clearDataDialog
         manager: deviceManager
     }
+
+    Connections {
+        target: Automation
+        function onLoginsRequested(id) {
+            if (id) deviceManager.selectDevice(id)
+            window.showLogins()
+        }
+    }
+
+    CredentialsDialog { id: credentialsDialog }
 
     SettingsDialog {
         id: settingsDialog

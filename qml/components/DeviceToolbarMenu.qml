@@ -15,11 +15,13 @@ Popup {
     property bool canReload: false
 
     signal reloadRequested()
+    signal screenshotRequested()
     signal devToolsToggled()
     signal openStandaloneRequested()
 
     parent: Overlay.overlay
     width: 190
+    height: Math.min(implicitHeight, Math.max(80, parent ? parent.height - 20 : implicitHeight))
     padding: 6
     modal: false
     focus: true
@@ -44,7 +46,15 @@ Popup {
         return mouse.containsMouse ? Theme.panelSoft : "transparent"
     }
 
-    contentItem: ColumnLayout {
+    contentItem: ScrollView {
+        id: menuScroll
+        implicitHeight: menuContents.implicitHeight
+        contentWidth: availableWidth
+        contentHeight: menuContents.implicitHeight
+        clip: true
+        ColumnLayout {
+            id: menuContents
+            width: menuScroll.availableWidth
         spacing: 2
 
         Rectangle {
@@ -73,6 +83,35 @@ Popup {
                 onClicked: {
                     root.close()
                     root.reloadRequested()
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 32
+            radius: 5
+            color: root.rowColor(shotMouse, true)
+            enabled: root.canReload
+            visible: root.device !== null
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Screenshot"
+                color: Theme.text
+                font.pixelSize: 12
+            }
+
+            MouseArea {
+                id: shotMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    root.close()
+                    Qt.callLater(function() { root.screenshotRequested() })
                 }
             }
         }
@@ -131,6 +170,18 @@ Popup {
                     root.openStandaloneRequested()
                 }
             }
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            color: Theme.border
+        }
+        AgentMenuActions {
+            Layout.fillWidth: true
+            device: root.device
+            standalone: root.standalone
+            onDismissRequested: root.close()
+        }
         }
     }
 }

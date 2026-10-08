@@ -14,7 +14,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Test WebEngineQuick)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Test WebEngineQuick Network)
 
 qt_policy(SET QTP0001 NEW)
 qt_policy(SET QTP0004 NEW)
@@ -53,6 +53,8 @@ target_link_libraries(hesh_core
 
 qt_add_executable(hesh
     src/main.cpp
+    src/automation/Automation.cpp
+    src/automation/Automation.hpp
     src/web/BrowserProfiles.cpp
     src/web/BrowserProfiles.hpp
 )
@@ -65,6 +67,7 @@ target_link_libraries(hesh
         Qt6::QuickControls2
         Qt6::WebEngineCore
         Qt6::WebEngineQuick
+        Qt6::Network
 )
 
 # The About section reports the running build, so the version cannot drift from
@@ -80,6 +83,7 @@ qt_add_qml_module(hesh
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/components/AgentMenuActions.qml
         qml/components/AppButton.qml
         qml/components/AccentPicker.qml
         qml/components/DeviceFrame.qml
@@ -95,6 +99,7 @@ qt_add_qml_module(hesh
         qml/components/SettingsGlyph.qml
         qml/components/StatusBadge.qml
         qml/dialogs/ClearDeviceDataDialog.qml
+        qml/dialogs/CredentialsDialog.qml
         qml/dialogs/CreateDeviceDialog.qml
         qml/dialogs/SettingsDialog.qml
         qml/pages/DeviceWorkspace.qml
@@ -120,3 +125,6 @@ add_test(NAME hesh_core_tests COMMAND hesh_tests)
 install(TARGETS hesh
     RUNTIME DESTINATION bin
 )
+
+qt_add_resources(hesh automation_scripts PREFIX "/automation" BASE src/automation FILES src/automation/page.js)
+install(PROGRAMS integrations/mcp/hesh_mcp.py DESTINATION bin RENAME hesh-mcp)

@@ -18,6 +18,7 @@ Popup {
 
     parent: Overlay.overlay
     width: 224
+    height: Math.min(implicitHeight, Math.max(80, parent ? parent.height - 20 : implicitHeight))
     padding: 7
     modal: false
     focus: true
@@ -58,7 +59,15 @@ Popup {
         root.manager.removeDevice(root.deviceId)
     }
 
-    contentItem: ColumnLayout {
+    contentItem: ScrollView {
+        id: menuScroll
+        implicitHeight: menuContents.implicitHeight
+        contentWidth: availableWidth
+        contentHeight: menuContents.implicitHeight
+        clip: true
+        ColumnLayout {
+            id: menuContents
+            width: menuScroll.availableWidth
         spacing: 3
 
         Text {
@@ -357,6 +366,18 @@ Popup {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.removeDevice()
             }
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            color: Theme.border
+        }
+        AgentMenuActions {
+            Layout.fillWidth: true
+            device: root.device
+            standalone: root.standalone
+            onDismissRequested: root.close()
+        }
         }
     }
 }

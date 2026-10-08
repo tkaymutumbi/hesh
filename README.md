@@ -34,6 +34,8 @@ Working today:
 - Drag-to-reorder devices in the sidebar, persisted with the device records
 - Settings dialog (Devices, Preview, Appearance, Storage, Advanced) that applies
   immediately and persists through `QSettings`
+- Local MCP server for Codex and Claude with device control, compact page inspection, batched actions and persistent agent memory
+- Saved logins backed by the Linux desktop keyring, with matching-origin fill and AI activity/pause overlays
 - Core model coverage in `tests/device_tests.cpp`, run through CTest
 
 Not implemented yet:
@@ -188,6 +190,12 @@ above stay on disk, and once the device is gone there is no UI left to clear
 them. Use **Clear Data** first if you want the browsing state erased, or delete
 the directory by hand.
 
+## AI control and saved logins
+
+See [docs/MCP.md](docs/MCP.md) for Codex/Claude setup, tool usage, keyring-backed
+login storage, activity overlays, and performance guidance. Open **Logins** in
+the titlebar to save an account; agents can fill it without receiving its password.
+
 ## Hyprland integration
 
 The standalone-window rule is kept in
@@ -250,3 +258,50 @@ advanced host controls.
 Once the device and presentation abstractions are proven, add a small Android
 runtime prototype around QEMU/KVM. That phase establishes process lifecycle and
 image contracts before ADB, APK, and snapshot features expand the scope.
+
+## Omarchy bar plugin
+
+`integrations/omarchy/inkay.hesh` contains the Hesh Devices bar widget. Copy this
+folder to `~/.config/omarchy/plugins/inkay.hesh`, install the current Hesh binary
+at `~/.local/bin/hesh`, and run:
+
+```bash
+omarchy plugin enable inkay.hesh --section right
+```
+
+Click the Hesh icon to manage saved devices in a compact popup. **Preview** opens
+only that device window; **URL** expands its address field; **+** reveals the new
+device form. **App** explicitly opens the main workspace. The plugin starts Hesh
+with `--background`, and closing the main workspace in this mode hides it while
+the backend and previews keep running.
+
+Hesh uses a user-only local socket and one backend per login session. Commands
+are JSON objects, for example:
+
+```bash
+hesh --control '{"action":"list"}'
+hesh --control '{"action":"preview","id":"DEVICE_ID"}'
+```
+
+Available actions: `list`, `create` (`name`, `profile`, `url`), `start`, `stop`,
+`preview`, `reload`, `url`, `show`, and `background`. Device actions require `id`.
+Device management does not launch the main workspace. Run the isolated socket
+smoke test with `python3 tests/control_smoke.py build/hesh`.
+
+## AI control overlay
+
+Agents mark their work with `hesh_session` (`start` before the first action,
+`done` when finished). While a session is active, or AI control is paused, the
+`inkay.hesh-agent` Omarchy service plugin shows a glow around the screen edge
+and a small ribbon with Pause/Resume; everything else stays click-through. The
+agent can pause and resume itself, but a pause made by you (the ribbon or
+`Ctrl+Alt+P`) can only be lifted by you. Sessions end on their own after a few
+minutes of silence. Install with:
+
+```bash
+ln -s "$PWD/integrations/omarchy/inkay.hesh-agent" ~/.config/omarchy/plugins/inkay.hesh-agent
+omarchy-shell shell rescanPlugins && omarchy plugin enable inkay.hesh-agent
+```
+
+The backend mirrors its state to `$XDG_RUNTIME_DIR/hesh-agent.json`. Control
+actions: `agent_start`, `agent_done`, `agent_pause`, `agent_resume`, `agent_status`.

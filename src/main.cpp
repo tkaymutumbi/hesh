@@ -7,6 +7,43 @@
 #include <QUrl>
 
 #include <cstdio>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QLocalServer>
+#include <QLocalSocket>
+#include <QLockFile>
+#include <QStandardPaths>
+#include <QTimer>
+#include <QUuid>
+#include "automation/Automation.hpp"
+
+static QString controlSocketPath()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)
+        + QStringLiteral("/hesh-control");
+}
+
+static int sendControl(const QJsonObject& request)
+{
+    QLocalSocket socket;
+    socket.connectToServer(controlSocketPath());
+    if (!socket.waitForConnected(1500)) {
+        std::puts("{\"ok\":false,\"error\":\"Hesh backend is not running\"}");
+        return 1;
+    }
+    socket.write(QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n');
+    socket.waitForBytesWritten(1500);
+    QByteArray reply;
+    while (!reply.contains('\n') && socket.waitForReadyRead(15000)) reply += socket.readAll();
+    if (reply.isEmpty()) {
+        std::puts("{\"ok\":false,\"error\":\"Hesh backend did not respond\"}");
+        return 1;
+    }
+    std::fwrite(reply.constData(), 1, reply.size(), stdout);
+    return QJsonDocument::fromJson(reply).object().value("ok").toBool() ? 0 : 1;
+}
+
 
 #include <QtWebEngineCore/qtwebenginecoreglobal.h>
 #include <QtWebEngineQuick/QtWebEngineQuick>
@@ -19,6 +56,17 @@
 
 int main(int argc, char* argv[])
 {
+    // Control clients never initialize Chromium or create a window.
+    if (argc >= 3 && QString::fromLocal8Bit(argv[1]) == QStringLiteral("--control")) {
+        QCoreApplication client(argc, argv);
+        QJsonParseError error;
+        const auto doc = QJsonDocument::fromJson(QByteArray(argv[2]), &error);
+        if (error.error != QJsonParseError::NoError || !doc.isObject()) {
+            std::puts("{\"ok\":false,\"error\":\"Expected a JSON command object\"}");
+            return 2;
+        }
+        return sendControl(doc.object());
+    }
     // Set the identity first: QSettings resolves the preference file from these
     // names, and the stored Chromium flags have to be read before WebEngine
     // starts.
@@ -65,6 +113,16 @@ int main(int argc, char* argv[])
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Hesh"));
     QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Hesh/assets/icons/hesh.png")));
 
+    QLockFile instanceLock(controlSocketPath() + QStringLiteral(".lock"));
+    instanceLock.setStaleLockTime(0);
+    const bool background = app.arguments().contains(QStringLiteral("--background"));
+    if (!instanceLock.tryLock(0)) {
+        return sendControl({{"action", background ? "background" : "show"}});
+    }
+    // Only the lock owner can clean up a socket left by a previous crash.
+    QLocalServer::removeServer(controlSocketPath());
+    app.setQuitOnLastWindowClosed(false);
+
     qmlRegisterUncreatableType<Hesh::Device>("Hesh", 1, 0, "Device",
                                               QStringLiteral("Devices are created by DeviceManager"));
     qmlRegisterUncreatableType<Hesh::WebDevice>("Hesh", 1, 0, "WebDevice",
@@ -81,8 +139,18 @@ int main(int argc, char* argv[])
     Hesh::BrowserProfiles browserProfiles;
     qmlRegisterSingletonInstance("Hesh", 1, 0, "BrowserProfiles", &browserProfiles);
 
+    Hesh::Automation automation;
+    qmlRegisterSingletonInstance("Hesh", 1, 0, "Automation", &automation);
+    automation.setNameResolver([&hesh](const QString& id) {
+        auto* model = static_cast<Hesh::DeviceListModel*>(hesh.deviceManager()->devices());
+        for (int row = 0; row < model->rowCount(); ++row)
+            if (model->at(row)->id() == id) return model->at(row)->name();
+        return QString();
+    });
+
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("deviceManager"), hesh.deviceManager());
+    engine.rootContext()->setContextProperty(QStringLiteral("backgroundLaunch"), background);
 
     QObject::connect(&engine,
                      &QQmlApplicationEngine::warnings,
@@ -119,5 +187,135 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    QLocalServer controlServer;
+    controlServer.setSocketOptions(QLocalServer::UserAccessOption);
+    QObject::connect(&controlServer, &QLocalServer::newConnection, &app, [&] {
+        while (auto* socket = controlServer.nextPendingConnection()) {
+            socket->setParent(&controlServer);
+            socket->setReadBufferSize(1024 * 1024 + 1);
+            QObject::connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
+            auto process = [&, socket] {
+                if (!socket->canReadLine()) return;
+                if (socket->property("processed").toBool()) return;
+                socket->setProperty("processed", true);
+                if (socket->bytesAvailable() > 1024 * 1024) {
+                    socket->write("{\"ok\":false,\"error\":\"Command exceeds 1 MiB\"}\n");
+                    socket->disconnectFromServer();
+                    return;
+                }
+                QJsonParseError parseError;
+                const auto doc = QJsonDocument::fromJson(socket->readLine(), &parseError);
+                if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+                    socket->write("{\"ok\":false,\"error\":\"Expected a JSON command object\"}\n");
+                    socket->disconnectFromServer();
+                    return;
+                }
+                const auto request = doc.object();
+                const auto action = request.value("action").toString();
+                const auto id = request.value("id").toString();
+                QJsonObject reply{{"ok", true}};
+                auto* manager = hesh.deviceManager();
+                auto* model = static_cast<Hesh::DeviceListModel*>(manager->devices());
+                Hesh::Device* device = nullptr;
+                for (int row = 0; row < model->rowCount(); ++row)
+                    if (model->at(row)->id() == id) device = model->at(row);
+                auto* root = engine.rootObjects().constFirst();
+                const bool agent = request.value("agent").toBool();
+                const bool automationAction = action == "inspect" || action == "interact"
+                    || action.startsWith("memory_") || action.startsWith("credential_");
+                if (action.startsWith("agent_")) {
+                    reply = automation.session(action.mid(6), request, agent);
+                    socket->write(QJsonDocument(reply).toJson(QJsonDocument::Compact) + '\n');
+                    socket->disconnectFromServer();
+                    return;
+                }
+                if (agent && automation.paused()) {
+                    socket->write("{\"ok\":false,\"error\":\"AI control is paused in Hesh\"}\n");
+                    socket->disconnectFromServer();
+                    return;
+                }
+                if (automationAction) {
+                    const auto token = QUuid::createUuid().toString(QUuid::WithoutBraces);
+                    QObject::connect(&automation, &Hesh::Automation::finished, socket,
+                        [socket, token](const QString& completed, const QJsonObject& response) {
+                        if (completed != token || socket->state() != QLocalSocket::ConnectedState) return;
+                        socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
+                        socket->disconnectFromServer();
+                    });
+                    automation.execute(token, request);
+                    return;
+                }
+                if (agent) automation.noteActivity(id, request.value("client").toString("AI"), action);
+                if (action == "list") {
+                    QJsonArray devices;
+                    for (int row = 0; row < model->rowCount(); ++row) {
+                        auto* d = model->at(row);
+                        auto* web = qobject_cast<Hesh::WebDevice*>(d);
+                        devices.append(QJsonObject{{"id", d->id()}, {"name", d->name()},
+                            {"profile", d->profileName()}, {"status", d->statusName()},
+                            {"url", web ? web->url() : QString()}, {"presentation", automation.presentation(d->id())}});
+                    }
+                    reply.insert("devices", devices);
+                    reply.insert("profiles", QJsonArray::fromVariantList(manager->availableProfiles()));
+                } else if (action == "show" || action == "background" || action == "logins") {
+                    QMetaObject::invokeMethod(root, action == "show" ? "showMainWindow" : action == "logins" ? "showLogins" : "enableBackground");
+                } else if (action == "create") {
+                    const auto name = request.value("name").toString().trimmed();
+                    const auto url = request.value("url").toString().trimmed();
+                    const auto profile = request.value("profile").toString("Pixel 7");
+                    bool validProfile = false;
+                    for (const auto& p : Hesh::DeviceProfile::catalog())
+                        if (p.name == profile) validProfile = true;
+                    const QUrl address(url);
+                    if (name.isEmpty() || !validProfile || !address.isValid()
+                        || (address.scheme() != "http" && address.scheme() != "https")) {
+                        reply = {{"ok", false}, {"error", "Enter a name, valid profile and http(s) URL"}};
+                    } else {
+                        auto* created = manager->createWebDevice(name, profile, url);
+                        reply.insert("id", created->id());
+                    }
+                } else if (!device) {
+                    reply = {{"ok", false}, {"error", "Device not found"}};
+                } else if (action == "context") {
+                    reply.insert("context", automation.deviceContext(device, automation.presentation(id)));
+                    reply.insert("prompt", automation.agentPrompt(device, automation.presentation(id)));
+                } else if (action == "start") {
+                    manager->startDevice(id);
+                } else if (action == "stop") {
+                    manager->stopDevice(id);
+                } else if (action == "preview") {
+                    manager->startDevice(id);
+                    QMetaObject::invokeMethod(root, "previewDevice", Q_ARG(QVariant, id));
+                } else if (action == "reload") {
+                    QMetaObject::invokeMethod(root, "reloadDevice", Q_ARG(QVariant, id));
+                } else if (action == "rename") {
+                    const auto name = request.value("name").toString().trimmed();
+                    if (name.isEmpty()) reply = {{"ok", false}, {"error", "Enter a device name"}};
+                    else device->setName(name);
+                } else if (action == "clear") {
+                    manager->clearDeviceData(id);
+                } else if (action == "delete") {
+                    QMetaObject::invokeMethod(root, "removeDeviceById", Q_ARG(QVariant, id));
+                } else if (action == "url") {
+                    auto* web = qobject_cast<Hesh::WebDevice*>(device);
+                    const QUrl url(request.value("url").toString());
+                    if (!web || !url.isValid() || (url.scheme() != "http" && url.scheme() != "https"))
+                        reply = {{"ok", false}, {"error", "Enter an http(s) URL"}};
+                    else web->setUrl(url.toString());
+                } else {
+                    reply = {{"ok", false}, {"error", "Unknown action"}};
+                }
+                socket->write(QJsonDocument(reply).toJson(QJsonDocument::Compact) + '\n');
+                socket->disconnectFromServer();
+            };
+            QObject::connect(socket, &QLocalSocket::readyRead, &app, process);
+            QTimer::singleShot(15000, socket, [socket] { socket->disconnectFromServer(); });
+            process();
+        }
+    });
+    if (!controlServer.listen(controlSocketPath())) {
+        qWarning() << "Hesh control socket:" << controlServer.errorString();
+        return EXIT_FAILURE;
+    }
     return app.exec();
 }

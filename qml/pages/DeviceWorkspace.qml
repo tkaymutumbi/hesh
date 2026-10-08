@@ -25,6 +25,7 @@ Item {
     // application-level shortcuts below must not fire into a hidden page.
     property bool dialogOpen: false
     signal openStandaloneRequested(var device)
+    function reloadPage() { if (deviceLoader.item) deviceLoader.item.reloadPage(false) }
 
     // WebEngine does not reliably receive application-level accelerators when
     // a QML control owns focus. Keep these at the workspace level so the same
@@ -41,6 +42,13 @@ Item {
         context: Qt.ApplicationShortcut
         enabled: root.visible && !root.dialogOpen && !root.standalone && deviceLoader.item !== null
         onActivated: deviceLoader.item.reloadPage(true)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+S"
+        context: Qt.ApplicationShortcut
+        enabled: root.visible && !root.dialogOpen && !root.standalone && deviceLoader.item !== null
+        onActivated: deviceLoader.item.takeScreenshot()
     }
 
     onDeviceChanged: {
@@ -95,6 +103,7 @@ Item {
         showDevTools: root.showDevTools
         canReload: root.device !== null && !root.standalone && deviceLoader.item !== null
         onReloadRequested: if (deviceLoader.item) deviceLoader.item.reloadPage(false)
+        onScreenshotRequested: if (deviceLoader.item) deviceLoader.item.takeScreenshot()
         onDevToolsToggled: root.showDevTools = !root.showDevTools
         onOpenStandaloneRequested: root.openStandaloneRequested(root.device)
     }

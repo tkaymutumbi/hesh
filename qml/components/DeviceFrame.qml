@@ -1,10 +1,21 @@
 import QtQuick
+import QtQuick.Window
+import QtQuick.Layouts
 import QtQuick.Shapes
 import QtWebEngine
+import QtCore
 import Hesh 1.0
 
 Item {
     id: root
+
+    readonly property bool presentationVisible: root.Window.window ? root.Window.window.visible : false
+    readonly property string pageUrl: webView.url.toString()
+    function automationRun(token, script) {
+        webView.runJavaScript(script, 1, function(result) {
+            Automation.complete(token, typeof result === "string" ? result : "")
+        })
+    }
 
     property var device: null
     // Optional DeviceManager, used by the stopped state to start the device
@@ -384,6 +395,21 @@ Item {
         return { kicker: "CAN'T CONNECT", title: "Unable to load preview", detail: "Hesh could not load this page. Check that the URL is running, then retry." }
     }
 
+    property string screenshotMessage: ""
+
+    // Saves exactly what the device shows to ~/Pictures as a PNG.
+    function takeScreenshot() {
+        if (!root.device || root.device.status !== "Running") return
+        var dir = StandardPaths.writableLocation(StandardPaths.PicturesLocation).toString().replace("file://", "")
+        var name = "hesh-" + root.device.name.replace(/[^A-Za-z0-9_-]+/g, "-") + "-"
+                   + Qt.formatDateTime(new Date(), "yyyyMMdd-HHmmss") + ".png"
+        var path = dir + "/" + name
+        webView.grabToImage(function(result) {
+            root.screenshotMessage = result.saveToFile(path) ? "Saved " + name : "Screenshot failed"
+            screenshotToast.restart()
+        })
+    }
+
     function goBack() { webView.goBack() }
     function goForward() { webView.goForward() }
     function ensureActive() {
@@ -519,9 +545,13 @@ Item {
         }
     }
 
-    Component.onCompleted: root.bindProfile()
+    Component.onCompleted: {
+        root.bindProfile()
+        if (root.device) Automation.registerSurface(root.device.id, root)
+    }
 
     Component.onDestruction: {
+        if (root.device) Automation.unregisterSurface(root.device.id, root)
         // Stop any pending load so the shared profile isn't kept busy
         // while the Loader's deferred destroy is still pending. This
         // prevents "black on switch" when a new DeviceFrame reuses the
@@ -992,6 +1022,30 @@ Item {
             }
         }
     }
+
+    Rectangle {
+        visible: screenshotToast.running
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 20
+        anchors.horizontalCenter: parent.horizontalCenter
+        z: 101
+        width: Math.min(shotText.implicitWidth + 28, root.width - 24)
+        height: 30
+        radius: 15
+        color: Theme.panelRaised
+        border.color: Theme.borderStrong
+        Text {
+            id: shotText
+            anchors.centerIn: parent
+            width: parent.width - 20
+            text: root.screenshotMessage
+            elide: Text.ElideMiddle
+            horizontalAlignment: Text.AlignHCenter
+            color: Theme.text
+            font.pixelSize: 11
+        }
+    }
+    Timer { id: screenshotToast; interval: 2600 }
 
     Rectangle {
         id: devToolsPanel
