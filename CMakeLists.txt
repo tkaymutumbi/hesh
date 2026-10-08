@@ -36,6 +36,8 @@ qt_add_library(hesh_core STATIC
     src/devices/DeviceProfile.hpp
     src/devices/DeviceStorage.cpp
     src/devices/DeviceStorage.hpp
+    src/android/AndroidDevice.cpp
+    src/android/AndroidDevice.hpp
     src/web/WebDevice.cpp
     src/web/WebDevice.hpp
 )
@@ -84,6 +86,7 @@ qt_add_qml_module(hesh
     QML_FILES
         qml/Main.qml
         qml/components/AgentMenuActions.qml
+        qml/components/AndroidPanel.qml
         qml/components/AppButton.qml
         qml/components/AccentPicker.qml
         qml/components/DeviceFrame.qml

@@ -17,6 +17,7 @@
 #include <QTimer>
 #include <QUuid>
 #include "automation/Automation.hpp"
+#include "android/AndroidDevice.hpp"
 
 static QString controlSocketPath()
 {
@@ -251,7 +252,7 @@ int main(int argc, char* argv[])
                     for (int row = 0; row < model->rowCount(); ++row) {
                         auto* d = model->at(row);
                         auto* web = qobject_cast<Hesh::WebDevice*>(d);
-                        devices.append(QJsonObject{{"id", d->id()}, {"name", d->name()},
+                        devices.append(QJsonObject{{"id", d->id()}, {"name", d->name()}, {"type", d->typeName()},
                             {"profile", d->profileName()}, {"status", d->statusName()},
                             {"url", web ? web->url() : QString()}, {"presentation", automation.presentation(d->id())}});
                     }
@@ -259,6 +260,10 @@ int main(int argc, char* argv[])
                     reply.insert("profiles", QJsonArray::fromVariantList(manager->availableProfiles()));
                 } else if (action == "show" || action == "background" || action == "logins") {
                     QMetaObject::invokeMethod(root, action == "show" ? "showMainWindow" : action == "logins" ? "showLogins" : "enableBackground");
+                } else if (action == "create" && request.value("type").toString() == "android") {
+                    const auto name = request.value("name").toString().trimmed();
+                    if (name.isEmpty()) reply = {{"ok", false}, {"error", "Enter a name"}};
+                    else reply.insert("id", manager->createAndroidDevice(name, request.value("profile").toString("Pixel 7"))->id());
                 } else if (action == "create") {
                     const auto name = request.value("name").toString().trimmed();
                     const auto url = request.value("url").toString().trimmed();
@@ -276,6 +281,10 @@ int main(int argc, char* argv[])
                     }
                 } else if (!device) {
                     reply = {{"ok", false}, {"error", "Device not found"}};
+                } else if (action == "android_info") {
+                    auto* android = qobject_cast<Hesh::AndroidDevice*>(device);
+                    if (!android) reply = {{"ok", false}, {"error", "Not an Android device"}};
+                    else reply.insert("serial", android->serial()), reply.insert("status", android->statusName());
                 } else if (action == "context") {
                     reply.insert("context", automation.deviceContext(device, automation.presentation(id)));
                     reply.insert("prompt", automation.agentPrompt(device, automation.presentation(id)));

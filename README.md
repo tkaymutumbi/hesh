@@ -300,3 +300,23 @@ minutes of silence. It loads together with the bar widget, so enabling `inkay.he
 
 The backend mirrors its state to `$XDG_RUNTIME_DIR/hesh-agent.json`. Control
 actions: `agent_start`, `agent_done`, `agent_pause`, `agent_resume`, `agent_status`.
+
+## Android devices
+
+Create a device with **Real Android device (emulator)** ticked, or with
+`hesh --control '{"action":"create","type":"android","name":"Pixel"}'`. Hesh runs
+the official Android Emulator (Android 15, Google APIs, x86_64) headless under
+KVM and shows it in a 300x600 scrcpy window titled `<name> — Hesh`, so it floats
+like the web devices and gets the AI-control overlay. The first start creates the
+virtual device and takes a few minutes; later starts use a quick-boot snapshot.
+
+Install the requirements once:
+
+```bash
+sdkmanager "emulator" "system-images;android-35;google_apis;x86_64"   # plus scrcpy and /dev/kvm
+```
+
+Virtual devices live in Hesh's data folder. After boot Hesh disables the Google
+apps that otherwise keep several cores busy under software rendering, and hides
+error dialogs. Agents drive a device with `hesh_android` (`ui`, `tap`, `type`,
+`key`, `swipe`, `scroll`, `launch`, `install`, `screenshot`, `packages`).

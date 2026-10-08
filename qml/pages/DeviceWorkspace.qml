@@ -163,7 +163,12 @@ Item {
                 id: deviceLoader
                 anchors.centerIn: parent
                 active: root.device !== null && !root.standalone && root.frameEnabled
-                sourceComponent: deviceFrameComponent
+                sourceComponent: root.device && root.device.type === "ANDROID" ? androidPanelComponent : deviceFrameComponent
+
+                Component {
+                    id: androidPanelComponent
+                    AndroidPanel { device: root.device }
+                }
 
                 Component {
                     id: deviceFrameComponent

@@ -54,7 +54,7 @@ Popup {
         return 0
     }
 
-    onOpened: reset()
+    onOpened: { reset(); androidBox.checked = false }
     onClosed: reset()
 
     ColumnLayout {
@@ -91,6 +91,20 @@ Popup {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 14
+
+            CheckBox {
+                id: androidBox
+                text: "Real Android device (emulator)"
+                font.pixelSize: 12
+                palette.windowText: Theme.text
+                contentItem: Text {
+                    leftPadding: androidBox.indicator.width + 8
+                    text: androidBox.text
+                    color: Theme.text
+                    font.pixelSize: 12
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
 
             Text {
                 text: "Name"
@@ -163,6 +177,7 @@ Popup {
             }
 
             Text {
+                visible: !androidBox.checked
                 text: "URL"
                 color: Theme.textMuted
                 font.pixelSize: 11
@@ -171,6 +186,7 @@ Popup {
 
             TextField {
                 id: urlField
+                visible: !androidBox.checked
                 Layout.fillWidth: true
                 implicitHeight: 38
                 color: Theme.text
@@ -242,7 +258,9 @@ Popup {
                 text: "Create Device"
                 compact: true
                 onClicked: {
-                    if (root.manager) {
+                    if (root.manager && androidBox.checked) {
+                        root.deviceCreated(root.manager.createAndroidDevice(nameField.text, profileCombo.currentText))
+                    } else if (root.manager) {
                         root.deviceCreated(root.manager.createWebDevice(nameField.text,
                                                                         profileCombo.currentText,
                                                                         urlField.text))

@@ -72,7 +72,7 @@ Item {
           || (m.specialWorkspace && m.specialWorkspace.id === c.workspace.id))
       })
     }
-    var mine = clients.filter(function(c) { return c["class"] === "hesh" && c.mapped && !c.hidden && visible(c) })
+    var mine = clients.filter(function(c) { return (c["class"] === "hesh" || c["class"] === "scrcpy") && c.mapped && !c.hidden && visible(c) })
     var suffix = " \u2014 Hesh"
     var standalone = mine.filter(function(c) {
       return c.title.endsWith(suffix) && c.title.indexOf("DevTools") < 0

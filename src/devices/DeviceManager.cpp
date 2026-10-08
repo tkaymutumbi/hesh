@@ -7,6 +7,7 @@
 
 #include "app/Settings.hpp"
 #include "web/WebDevice.hpp"
+#include "android/AndroidDevice.hpp"
 
 namespace Hesh {
 
@@ -156,6 +157,17 @@ WebDevice* DeviceManager::createWebDevice(const QString& requestedName,
     return device;
 }
 
+Device* DeviceManager::createAndroidDevice(const QString& requestedName, const QString& profileName)
+{
+    const auto name = requestedName.trimmed().isEmpty() ? QStringLiteral("Android Device") : requestedName.trimmed();
+    auto* device = new AndroidDevice(
+        QUuid::createUuid().toString(QUuid::WithoutBraces), name, DeviceProfile::fromName(profileName), this);
+    addDevice(device, true);
+    device->start();
+    persist();
+    return device;
+}
+
 void DeviceManager::removeDevice(const QString& id)
 {
     auto* device = findById(id);
@@ -267,16 +279,16 @@ void DeviceManager::load()
     }
 
     for (const auto& record : m_settings->loadDevices()) {
-        if (deviceTypeFromString(record.type) != DeviceType::Web) {
-            qWarning() << "Skipping unsupported persisted device type:" << record.type;
-            continue;
+        Device* device = nullptr;
+        if (deviceTypeFromString(record.type) == DeviceType::Android) {
+            device = new AndroidDevice(record.id, record.name, DeviceProfile::fromName(record.profileName), this);
+        } else {
+            device = new WebDevice(record.id,
+                                   record.name,
+                                   DeviceProfile::fromName(record.profileName),
+                                   record.url,
+                                   this);
         }
-
-        auto* device = new WebDevice(record.id,
-                                     record.name,
-                                     DeviceProfile::fromName(record.profileName),
-                                     record.url,
-                                     this);
         // Set before the device joins the model so restoring a stored accent is
         // not mistaken for an edit worth persisting.
         device->setAccentName(record.accent);
