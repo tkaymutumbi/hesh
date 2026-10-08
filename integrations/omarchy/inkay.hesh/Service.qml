@@ -3,6 +3,7 @@ import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import qs.Commons
 
 // Overlay for Hesh AI control. It exists only while the agent has an active
@@ -83,6 +84,22 @@ Item {
       return {x: c.at[0] - m.x, y: c.at[1] - m.y, w: c.size[0], h: c.size[1], monitor: m.name, top: m.reserved[1]}
     })
     if (JSON.stringify(out) !== JSON.stringify(targets)) targets = out
+  }
+
+  // Hide at once when the workspace or focus changes instead of waiting for
+  // the next poll, which would leave the overlay up for a moment on the
+  // workspace being left. The poll then brings it back if it should show.
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      var n = event.name
+      if (n === "workspace" || n === "workspacev2" || n === "focusedmon" || n === "focusedmonv2"
+          || n === "activespecial" || n === "activespecialv2" || n === "movewindow" || n === "movewindowv2"
+          || n === "closewindow") {
+        if (root.targets.length > 0) root.targets = []
+        root.poll()
+      }
+    }
   }
 
   Process {
