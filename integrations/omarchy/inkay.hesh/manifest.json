@@ -2,12 +2,18 @@
   "schemaVersion": 1,
   "id": "inkay.hesh",
   "name": "Hesh Devices",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "inkay",
   "license": "MIT",
-  "description": "Manage Hesh devices from the bar without opening the main app.",
-  "kinds": ["bar-widget"],
-  "entryPoints": {"barWidget": "BarWidget.qml"},
+  "description": "Manage Hesh devices from the bar, and show an overlay around the device while an AI agent works in it.",
+  "kinds": [
+    "bar-widget",
+    "service"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml",
+    "service": "Service.qml"
+  },
   "barWidget": {
     "displayName": "Hesh Devices",
     "description": "Device controls, URLs and previews in a bar popup.",
@@ -16,5 +22,6 @@
     "defaultSection": "right",
     "defaults": {},
     "schema": []
-  }
+  },
+  "keepLoaded": true
 }

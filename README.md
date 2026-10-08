@@ -292,16 +292,11 @@ smoke test with `python3 tests/control_smoke.py build/hesh`.
 
 Agents mark their work with `hesh_session` (`start` before the first action,
 `done` when finished). While a session is active, or AI control is paused, the
-`inkay.hesh-agent` Omarchy service plugin shows a glow around the screen edge
+`inkay.hesh` Omarchy plugin (its service half) shows a glow around the screen edge
 and a small ribbon with Pause/Resume; everything else stays click-through. The
 agent can pause and resume itself, but a pause made by you (the ribbon or
 `Ctrl+Alt+P`) can only be lifted by you. Sessions end on their own after a few
-minutes of silence. Install with:
-
-```bash
-ln -s "$PWD/integrations/omarchy/inkay.hesh-agent" ~/.config/omarchy/plugins/inkay.hesh-agent
-omarchy-shell shell rescanPlugins && omarchy plugin enable inkay.hesh-agent
-```
+minutes of silence. It loads together with the bar widget, so enabling `inkay.hesh` is enough.
 
 The backend mirrors its state to `$XDG_RUNTIME_DIR/hesh-agent.json`. Control
 actions: `agent_start`, `agent_done`, `agent_pause`, `agent_resume`, `agent_status`.
