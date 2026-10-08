@@ -263,7 +263,12 @@ int main(int argc, char* argv[])
                 } else if (action == "create" && request.value("type").toString() == "android") {
                     const auto name = request.value("name").toString().trimmed();
                     if (name.isEmpty()) reply = {{"ok", false}, {"error", "Enter a name"}};
-                    else reply.insert("id", manager->createAndroidDevice(name, request.value("profile").toString("Pixel 7"))->id());
+                    else {
+                        const auto flavor = request.value("flavor").toString("google");
+                        const auto serial = request.value("serial").toString();
+                        if (flavor == "phone" && serial.isEmpty()) reply = {{"ok", false}, {"error", "Choose a connected phone serial"}};
+                        else reply.insert("id", manager->createAndroidDevice(name, request.value("profile").toString("Pixel 7"), flavor, serial)->id());
+                    }
                 } else if (action == "create") {
                     const auto name = request.value("name").toString().trimmed();
                     const auto url = request.value("url").toString().trimmed();

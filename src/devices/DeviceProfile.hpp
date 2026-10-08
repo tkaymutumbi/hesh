@@ -45,6 +45,10 @@ struct DeviceRecord
     // this device; anything else means "system". A record without the key
     // predates the setting and loads as "system".
     QString contentTheme;
+    // Android devices only: "google" or "light" emulator, or "phone" for a
+    // real handset, with its adb serial.
+    QString flavor;
+    QString serial;
 };
 
 QJsonObject deviceRecordToJson(const DeviceRecord& record);

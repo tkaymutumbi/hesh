@@ -14,20 +14,29 @@ class AndroidDevice final : public Device
 {
     Q_OBJECT
     Q_PROPERTY(QString serial READ serial CONSTANT)
+    Q_PROPERTY(QString flavor READ flavor CONSTANT)
     Q_PROPERTY(QString statusDetail READ statusDetail NOTIFY statusDetailChanged)
 
 public:
-    AndroidDevice(QString id, QString name, DeviceProfile profile, QObject* parent = nullptr);
+    // flavor: "google" (Google APIs emulator), "light" (plain Android, no Google
+    // apps) or "phone" (a real handset reachable through adb, with its serial).
+    AndroidDevice(QString id, QString name, DeviceProfile profile, QString flavor,
+                  QString phoneSerial, QObject* parent = nullptr);
     ~AndroidDevice() override;
 
     QString serial() const;
     QString avdName() const;
+    QString flavor() const { return m_flavor; }
+    bool isPhone() const { return m_flavor == QLatin1String("phone"); }
+    QString systemImage() const;
+    // "serial|model" for each adb device that is a real handset.
+    Q_INVOKABLE static QStringList connectedPhones();
     QString statusDetail() const;
     static QString sdkRoot();
     // Hesh keeps its virtual devices in its own data directory.
     static QString avdHome();
     // Why the Android runtime cannot be used on this machine, or empty.
-    static QString missingRequirement();
+    QString missingRequirement() const;
 
     void start() override;
     void stop() override;
@@ -47,6 +56,8 @@ private:
     void fail(const QString& message);
     QProcess* tool(const QString& program, const QStringList& arguments);
 
+    QString m_flavor;
+    QString m_phoneSerial;
     int m_port = 5554;
     QString m_detail;
     QProcess m_emulator;

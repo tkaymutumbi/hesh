@@ -310,10 +310,16 @@ KVM and shows it in a 300x600 scrcpy window titled `<name> — Hesh`, so it floa
 like the web devices and gets the AI-control overlay. The first start creates the
 virtual device and takes a few minutes; later starts use a quick-boot snapshot.
 
+Three kinds exist: **My phone**, which attaches to a handset already connected
+through adb (USB or wireless debugging) and just mirrors it with scrcpy, so it
+costs nothing extra; **Android emulator, light**, plain Android without Google
+apps (1.5 GB RAM, 3 cores); and **Android emulator, with Google apps**. Phones are
+never rebooted, stopped or altered: stopping one only closes the mirror window.
+
 Install the requirements once:
 
 ```bash
-sdkmanager "emulator" "system-images;android-35;google_apis;x86_64"   # plus scrcpy and /dev/kvm
+sdkmanager "emulator" "system-images;android-35;default;x86_64" "system-images;android-35;google_apis;x86_64"   # plus scrcpy and /dev/kvm
 ```
 
 Virtual devices live in Hesh's data folder. After boot Hesh disables the Google

@@ -18,22 +18,50 @@ QString AndroidDevice::avdHome()
     return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/android-avd");
 }
 
-QString AndroidDevice::missingRequirement()
+QString AndroidDevice::systemImage() const
+{
+    return m_flavor == QLatin1String("light") ? QStringLiteral("system-images;android-35;default;x86_64")
+                                              : QStringLiteral("system-images;android-35;google_apis;x86_64");
+}
+
+QStringList AndroidDevice::connectedPhones()
+{
+    QProcess adb;
+    adb.start(sdkRoot() + QStringLiteral("/platform-tools/adb"), {QStringLiteral("devices"), QStringLiteral("-l")});
+    adb.waitForFinished(5000);
+    QStringList phones;
+    for (const auto& line : QString::fromUtf8(adb.readAllStandardOutput()).split(QLatin1Char('\n'))) {
+        const auto parts = line.simplified().split(QLatin1Char(' '));
+        if (parts.size() < 2 || parts.at(1) != QLatin1String("device") || parts.at(0).startsWith(QLatin1String("emulator-")))
+            continue;
+        QString model = parts.at(0);
+        for (const auto& part : parts)
+            if (part.startsWith(QLatin1String("model:"))) model = part.mid(6);
+        phones << parts.at(0) + QLatin1Char('|') + model;
+    }
+    return phones;
+}
+
+QString AndroidDevice::missingRequirement() const
 {
     const auto sdk = sdkRoot();
-    if (!QFile::exists(sdk + QStringLiteral("/emulator/emulator")))
-        return QStringLiteral("Android Emulator is not installed (sdkmanager \"emulator\")");
-    if (!QFile::exists(sdk + QStringLiteral("/system-images/android-35/google_apis/x86_64/system.img")))
-        return QStringLiteral("System image missing (sdkmanager \"system-images;android-35;google_apis;x86_64\")");
     if (QStandardPaths::findExecutable(QStringLiteral("scrcpy")).isEmpty())
         return QStringLiteral("scrcpy is not installed");
+    if (isPhone()) return {};
+    if (!QFile::exists(sdk + QStringLiteral("/emulator/emulator")))
+        return QStringLiteral("Android Emulator is not installed (sdkmanager \"emulator\")");
+    if (!QFile::exists(sdk + QLatin1Char('/') + systemImage().replace(QLatin1Char(';'), QLatin1Char('/')) + QStringLiteral("/system.img")))
+        return QStringLiteral("System image missing (sdkmanager \"%1\")").arg(systemImage());
     if (!QFile::exists(QStringLiteral("/dev/kvm")))
         return QStringLiteral("KVM is not available");
     return {};
 }
 
-AndroidDevice::AndroidDevice(QString id, QString name, DeviceProfile profile, QObject* parent)
+AndroidDevice::AndroidDevice(QString id, QString name, DeviceProfile profile, QString flavor,
+                             QString phoneSerial, QObject* parent)
     : Device(std::move(id), std::move(name), DeviceType::Android, std::move(profile), parent)
+    , m_flavor(flavor == QLatin1String("light") || flavor == QLatin1String("phone") ? std::move(flavor) : QStringLiteral("google"))
+    , m_phoneSerial(std::move(phoneSerial))
 {
     // Even ports 5556..5584, stable per device id so adb serials survive restarts.
     m_port = 5556 + 2 * int(qHash(this->id()) % 15);
@@ -62,7 +90,7 @@ AndroidDevice::~AndroidDevice()
     }
 }
 
-QString AndroidDevice::serial() const { return QStringLiteral("emulator-%1").arg(m_port); }
+QString AndroidDevice::serial() const { return isPhone() ? m_phoneSerial : QStringLiteral("emulator-%1").arg(m_port); }
 QString AndroidDevice::avdName() const { return QStringLiteral("hesh_") + id().left(8); }
 QString AndroidDevice::statusDetail() const { return m_detail; }
 
@@ -103,6 +131,22 @@ void AndroidDevice::start()
     setStatus(Status::Starting);
     setDetail(QStringLiteral("Preparing device"));
 
+    if (isPhone()) {
+        // A real handset needs no boot: confirm adb can reach it, then show it.
+        auto* check = tool(sdkRoot() + QStringLiteral("/platform-tools/adb"),
+                           {QStringLiteral("-s"), serial(), QStringLiteral("get-state")});
+        connect(check, &QProcess::finished, this, [this, check] {
+            if (QString::fromUtf8(check->readAllStandardOutput()).trimmed() != QLatin1String("device")) {
+                fail(QStringLiteral("Phone not reachable. Unlock it and check USB or wireless debugging."));
+                return;
+            }
+            setDetail(QString());
+            setStatus(Status::Running);
+            openScreen();
+        });
+        return;
+    }
+
     const auto avdDir = avdHome() + QLatin1Char('/') + avdName() + QStringLiteral(".avd");
     if (QDir(avdDir).exists()) {
         launchEmulator();
@@ -122,14 +166,14 @@ void AndroidDevice::start()
         const auto ini = avdHome() + QLatin1Char('/') + avdName() + QStringLiteral(".avd/config.ini");
         QFile f(ini);
         if (f.open(QIODevice::Append))
-            f.write("hw.ramSize=2048\ndisk.dataPartition.size=8G\nhw.keyboard=yes\n"
+            f.write((m_flavor == QLatin1String("light") ? "hw.ramSize=1536\n" : "hw.ramSize=2048\n") + QByteArray("disk.dataPartition.size=8G\nhw.keyboard=yes\n"
                     // A compact 2:1 screen: smaller on the desktop and lighter to render.
-                    "skin.name=720x1440\nskin.path=_no_skin\nhw.lcd.width=720\nhw.lcd.height=1440\nhw.lcd.density=280\n");
+                    "skin.name=720x1440\nskin.path=_no_skin\nhw.lcd.width=720\nhw.lcd.height=1440\nhw.lcd.density=280\n"));
         launchEmulator();
     });
     create->start(sdkRoot() + QStringLiteral("/cmdline-tools/latest/bin/avdmanager"),
                   {QStringLiteral("create"), QStringLiteral("avd"), QStringLiteral("-n"), avdName(),
-                   QStringLiteral("-k"), QStringLiteral("system-images;android-35;google_apis;x86_64"),
+                   QStringLiteral("-k"), systemImage(),
                    QStringLiteral("-d"), QStringLiteral("pixel_7"), QStringLiteral("--force")});
     create->write("no\n");
     create->closeWriteChannel();
@@ -147,7 +191,8 @@ void AndroidDevice::launchEmulator()
                      {QStringLiteral("-avd"), avdName(), QStringLiteral("-port"), QString::number(m_port),
                       QStringLiteral("-no-window"), QStringLiteral("-no-audio"), QStringLiteral("-no-boot-anim"),
                       QStringLiteral("-gpu"), QStringLiteral("swiftshader_indirect"),
-                      QStringLiteral("-cores"), QStringLiteral("4"), QStringLiteral("-memory"), QStringLiteral("2048"),
+                      QStringLiteral("-cores"), m_flavor == QLatin1String("light") ? QStringLiteral("3") : QStringLiteral("4"),
+                      QStringLiteral("-memory"), m_flavor == QLatin1String("light") ? QStringLiteral("1536") : QStringLiteral("2048"),
                       QStringLiteral("-feature"), QStringLiteral("-Vulkan"), QStringLiteral("-netdelay"), QStringLiteral("none"),
                       QStringLiteral("-netspeed"), QStringLiteral("full")});
     m_bootChecks = 0;
@@ -192,10 +237,13 @@ void AndroidDevice::openScreen()
     if (m_screen.state() != QProcess::NotRunning) return;
     // The window title follows the web devices' "<name> — Hesh" so the shell
     // overlay can find and frame it.
+    QStringList extra;
+    // Keeping a real phone awake would change its settings; only emulators get it.
+    if (!isPhone()) extra << QStringLiteral("--stay-awake");
     m_screen.start(QStringLiteral("scrcpy"),
-                   {QStringLiteral("-s"), serial(), QStringLiteral("--window-title"),
+                   extra + QStringList{QStringLiteral("-s"), serial(), QStringLiteral("--window-title"),
                     name() + QStringLiteral(" — Hesh"), QStringLiteral("--no-audio"),
-                    QStringLiteral("--stay-awake"), QStringLiteral("--max-fps"), QStringLiteral("60"),
+                    QStringLiteral("--max-fps"), QStringLiteral("60"),
                     QStringLiteral("--window-width"), QStringLiteral("300"), QStringLiteral("--window-height"), QStringLiteral("600")});
 }
 
@@ -209,7 +257,7 @@ void AndroidDevice::stop()
     m_bootTimer.stop();
     m_stopping = true;
     if (m_screen.state() != QProcess::NotRunning) m_screen.terminate();
-    if (m_emulator.state() == QProcess::NotRunning) {
+    if (isPhone() || m_emulator.state() == QProcess::NotRunning) {
         setDetail(QString());
         setStatus(Status::Stopped);
         return;
@@ -221,6 +269,7 @@ void AndroidDevice::stop()
 
 void AndroidDevice::clearPersistentData()
 {
+    if (isPhone()) return;
     if (m_emulator.state() != QProcess::NotRunning) { m_emulator.kill(); m_emulator.waitForFinished(3000); }
     QDir(avdHome() + QLatin1Char('/') + avdName() + QStringLiteral(".avd")).removeRecursively();
     QFile::remove(avdHome() + QLatin1Char('/') + avdName() + QStringLiteral(".ini"));

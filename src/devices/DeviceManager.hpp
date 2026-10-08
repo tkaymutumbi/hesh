@@ -66,7 +66,10 @@ public:
     Q_INVOKABLE WebDevice* createWebDevice(const QString& name,
                                            const QString& profileName,
                                            const QString& url);
-    Q_INVOKABLE Device* createAndroidDevice(const QString& name, const QString& profileName);
+    Q_INVOKABLE Device* createAndroidDevice(const QString& name, const QString& profileName,
+                                            const QString& flavor = QStringLiteral("google"),
+                                            const QString& phoneSerial = QString());
+    Q_INVOKABLE QStringList connectedPhones() const;
     Q_INVOKABLE void removeDevice(const QString& id);
     Q_INVOKABLE void clearDeviceData(const QString& id);
     Q_INVOKABLE void clearAllDeviceData();

@@ -157,11 +157,14 @@ WebDevice* DeviceManager::createWebDevice(const QString& requestedName,
     return device;
 }
 
-Device* DeviceManager::createAndroidDevice(const QString& requestedName, const QString& profileName)
+QStringList DeviceManager::connectedPhones() const { return AndroidDevice::connectedPhones(); }
+
+Device* DeviceManager::createAndroidDevice(const QString& requestedName, const QString& profileName,
+                                           const QString& flavor, const QString& phoneSerial)
 {
     const auto name = requestedName.trimmed().isEmpty() ? QStringLiteral("Android Device") : requestedName.trimmed();
     auto* device = new AndroidDevice(
-        QUuid::createUuid().toString(QUuid::WithoutBraces), name, DeviceProfile::fromName(profileName), this);
+        QUuid::createUuid().toString(QUuid::WithoutBraces), name, DeviceProfile::fromName(profileName), flavor, phoneSerial, this);
     addDevice(device, true);
     device->start();
     persist();
@@ -281,7 +284,7 @@ void DeviceManager::load()
     for (const auto& record : m_settings->loadDevices()) {
         Device* device = nullptr;
         if (deviceTypeFromString(record.type) == DeviceType::Android) {
-            device = new AndroidDevice(record.id, record.name, DeviceProfile::fromName(record.profileName), this);
+            device = new AndroidDevice(record.id, record.name, DeviceProfile::fromName(record.profileName), record.flavor, record.serial, this);
         } else {
             device = new WebDevice(record.id,
                                    record.name,
@@ -354,6 +357,10 @@ void DeviceManager::persist() const
         record.contentTheme = device->contentTheme();
         if (const auto* webDevice = qobject_cast<const WebDevice*>(device)) {
             record.url = webDevice->url();
+        }
+        if (const auto* android = qobject_cast<const AndroidDevice*>(device)) {
+            record.flavor = android->flavor();
+            if (android->isPhone()) record.serial = android->serial();
         }
         records.append(record);
     }

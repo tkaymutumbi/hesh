@@ -54,7 +54,7 @@ Popup {
         return 0
     }
 
-    onOpened: { reset(); androidBox.checked = false }
+    onOpened: { reset(); kindCombo.currentIndex = 0; phoneCombo.phones = root.manager ? root.manager.connectedPhones() : [] }
     onClosed: reset()
 
     ColumnLayout {
@@ -92,18 +92,22 @@ Popup {
             Layout.fillHeight: true
             spacing: 14
 
-            CheckBox {
-                id: androidBox
-                text: "Real Android device (emulator)"
+            ComboBox {
+                id: kindCombo
+                Layout.fillWidth: true
+                implicitHeight: 38
+                model: ["Web page", "My phone (connected over adb)", "Android emulator, light", "Android emulator, with Google apps"]
                 font.pixelSize: 12
-                palette.windowText: Theme.text
-                contentItem: Text {
-                    leftPadding: androidBox.indicator.width + 8
-                    text: androidBox.text
-                    color: Theme.text
-                    font.pixelSize: 12
-                    verticalAlignment: Text.AlignVCenter
-                }
+            }
+
+            ComboBox {
+                id: phoneCombo
+                Layout.fillWidth: true
+                implicitHeight: 38
+                visible: kindCombo.currentIndex === 1
+                property var phones: []
+                model: phones.length > 0 ? phones.map(function(p) { return p.split("|")[1] + "  (" + p.split("|")[0] + ")" }) : ["No phone found: connect it and allow debugging"]
+                font.pixelSize: 12
             }
 
             Text {
@@ -177,7 +181,7 @@ Popup {
             }
 
             Text {
-                visible: !androidBox.checked
+                visible: !kindCombo.currentIndex > 0
                 text: "URL"
                 color: Theme.textMuted
                 font.pixelSize: 11
@@ -186,7 +190,7 @@ Popup {
 
             TextField {
                 id: urlField
-                visible: !androidBox.checked
+                visible: !kindCombo.currentIndex > 0
                 Layout.fillWidth: true
                 implicitHeight: 38
                 color: Theme.text
@@ -258,8 +262,13 @@ Popup {
                 text: "Create Device"
                 compact: true
                 onClicked: {
-                    if (root.manager && androidBox.checked) {
-                        root.deviceCreated(root.manager.createAndroidDevice(nameField.text, profileCombo.currentText))
+                    if (root.manager && kindCombo.currentIndex > 0) {
+                        const phone = kindCombo.currentIndex === 1
+                        if (phone && phoneCombo.phones.length === 0) return
+                        root.deviceCreated(root.manager.createAndroidDevice(
+                            nameField.text, profileCombo.currentText,
+                            phone ? "phone" : kindCombo.currentIndex === 2 ? "light" : "google",
+                            phone ? phoneCombo.phones[phoneCombo.currentIndex].split("|")[0] : ""))
                     } else if (root.manager) {
                         root.deviceCreated(root.manager.createWebDevice(nameField.text,
                                                                         profileCombo.currentText,
