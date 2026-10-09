@@ -26,10 +26,18 @@ ApplicationWindow {
     property bool backgroundMode: backgroundLaunch
     function enableBackground() { backgroundMode = true }
     function showMainWindow() { show(); raise(); requestActivate() }
+    // Opens the phone menu for the device whose name is `name` (a phone's
+    // window title is "<name> — Hesh").
+    function showPhoneMenu(id) {
+        var phone = deviceManager.deviceById(id)
+        if (phone) phoneMenu.openFor(phone)
+    }
     function showLogins() { showMainWindow(); credentialsDialog.open() }
-    function previewDevice(id) {
-        deviceManager.selectDevice(id)
-        openStandaloneForDevice(deviceManager.selectedDevice)
+    // quiet: opened for an AI agent. The window appears without taking focus, so
+    // the user's pointer and keyboard stay where they are.
+    function previewDevice(id, quiet) {
+        if (!quiet) deviceManager.selectDevice(id)
+        openStandaloneForDevice(quiet ? deviceManager.deviceById(id) : deviceManager.selectedDevice, quiet)
     }
     function removeDeviceById(id) {
         closeStandaloneForDevice(id)
@@ -161,14 +169,14 @@ ApplicationWindow {
         clearDataDialog.open()
     }
 
-    function openStandaloneForDevice(device) {
+    function openStandaloneForDevice(device, quiet) {
         if (!device || !device.id) return
         // Android devices are shown by scrcpy, not by a web window.
         if (device.type === "ANDROID") { device.showScreen(); return }
         var deviceId = device.id
         var existing = window.standaloneWindows[deviceId]
         if (existing) {
-            existing.focusWindow()
+            if (!quiet) existing.focusWindow()
             return
         }
         if (window.pendingStandaloneIds[deviceId]) return
@@ -188,7 +196,7 @@ ApplicationWindow {
                 return
             }
             if (window.standaloneWindows[deviceId]) {
-                window.standaloneWindows[deviceId].focusWindow()
+                if (!quiet) window.standaloneWindows[deviceId].focusWindow()
                 return
             }
             var host = standaloneWindowComponent.createObject(null, { device: device, manager: deviceManager })
@@ -208,7 +216,7 @@ ApplicationWindow {
                 window.showMainWindow()
             })
             host.show()
-            host.focusWindow()
+            if (!quiet) host.focusWindow()
         })
     }
 
@@ -443,6 +451,7 @@ ApplicationWindow {
     }
 
     CredentialsDialog { id: credentialsDialog }
+    PhoneMenu { id: phoneMenu }
 
     SettingsDialog {
         id: settingsDialog

@@ -290,10 +290,12 @@ smoke test with `python3 tests/control_smoke.py build/hesh`.
 
 ## AI control overlay
 
+Windows and mirrors opened for an agent do not take focus or move your pointer.
 Agents mark their work with `hesh_session` (`start` before the first action,
 `done` when finished). While a session is active, or AI control is paused, the
-`inkay.hesh` Omarchy plugin (its service half) shows a glow around the screen edge
-and a small ribbon with Pause/Resume; everything else stays click-through. The
+`inkay.hesh` Omarchy plugin (its service half) shows a rainbow glow around the device window and a small circle on its side
+edge; click it for a box with Pause/Resume and End session. Everything else
+stays click-through. The
 agent can pause and resume itself, but a pause made by you (the ribbon or
 `Ctrl+Alt+P`) can only be lifted by you. Sessions end on their own after a few
 minutes of silence. It loads together with the bar widget, so enabling `inkay.hesh` is enough.
@@ -329,9 +331,10 @@ mirror window is tied to Hesh and closes with it. scrcpy's separate virtual
 display is not offered: TECNO's Android 14 sends apps started there back to the
 phone's own screen.
 
-On the mirror window: drag to swipe, scroll wheel to scroll, right-click is Back,
-middle-click is Home, Ctrl+drag pinches, Alt+S Recents, Alt+N notifications,
-Alt+P power, Alt+Up/Down volume. The workspace panel also has Back, Home,
-Recents, Notifications, volume, Power and Screenshot buttons. Agents use
+On the mirror window: drag to swipe, scroll wheel to scroll, middle-click is
+Home, Ctrl+drag pinches. Right-click opens Hesh's phone menu (Back, Home,
+Recents, Notifications, volume, Power, Screenshot, screen off, Stop). The menu
+needs the Hyprland rules in `config/hypr/hesh.lua` and the `hesh-phone-menu`
+script on your PATH (`~/.local/bin`). The workspace panel has the same buttons. Agents use
 `hesh_android` (`ui`, `tap`, `type`, `key`, `swipe`, `scroll`, `launch`,
 `install`, `screenshot`, `packages`).

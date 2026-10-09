@@ -314,6 +314,16 @@ int main(int argc, char* argv[])
                         auto* created = manager->createWebDevice(name, profile, url);
                         reply.insert("id", created->id());
                     }
+                } else if (action == "android_menu") {
+                    // Find the phone by its window title "<name> — Hesh".
+                    Hesh::Device* phone = nullptr;
+                    const auto title = request.value("title").toString();
+                    for (int row = 0; row < model->rowCount(); ++row)
+                        if (model->at(row)->deviceType() == Hesh::DeviceType::Android
+                            && title == model->at(row)->name() + QStringLiteral(" \u2014 Hesh"))
+                            phone = model->at(row);
+                    if (!phone) reply = {{"ok", false}, {"error", "No phone window with that title"}};
+                    else QMetaObject::invokeMethod(root, "showPhoneMenu", Q_ARG(QVariant, phone->id()));
                 } else if (!device) {
                     reply = {{"ok", false}, {"error", "Device not found"}};
                 } else if (action == "android_mode") {
@@ -338,7 +348,7 @@ int main(int argc, char* argv[])
                     manager->stopDevice(id);
                 } else if (action == "preview") {
                     manager->startDevice(id);
-                    QMetaObject::invokeMethod(root, "previewDevice", Q_ARG(QVariant, id));
+                    QMetaObject::invokeMethod(root, "previewDevice", Q_ARG(QVariant, id), Q_ARG(QVariant, agent));
                 } else if (action == "reload") {
                     QMetaObject::invokeMethod(root, "reloadDevice", Q_ARG(QVariant, id));
                 } else if (action == "rename") {

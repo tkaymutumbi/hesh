@@ -118,6 +118,8 @@ void AndroidDevice::openScreen()
     // and the shell overlay can find and frame it.
     QStringList arguments{QStringLiteral("-s"), m_serial, QStringLiteral("--window-title"),
                           name() + QStringLiteral(" \u2014 Hesh"), QStringLiteral("--no-audio"),
+                          // Right-click opens the Hesh menu (see PhoneMenu), middle-click is Home.
+                          QStringLiteral("--mouse-bind=-h--:++++"),
                           QStringLiteral("--max-fps"), QStringLiteral("60"),
                           QStringLiteral("--window-width"), QStringLiteral("300"), QStringLiteral("--window-height"), QStringLiteral("600")};
     if (m_mode == QLatin1String("dark")) arguments << QStringLiteral("--turn-screen-off");

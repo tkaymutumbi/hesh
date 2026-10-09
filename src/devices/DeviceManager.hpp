@@ -86,6 +86,7 @@ public:
     Q_INVOKABLE void cancelQrPairing();
     Q_INVOKABLE QString qrPairingState() const { return m_qrState; }
     Q_INVOKABLE QString qrPairingMessage() const { return m_qrMessage; }
+    Q_INVOKABLE QObject* deviceById(const QString& id) const { return findById(id); }
     Q_INVOKABLE void removeDevice(const QString& id);
     Q_INVOKABLE void clearDeviceData(const QString& id);
     Q_INVOKABLE void clearAllDeviceData();

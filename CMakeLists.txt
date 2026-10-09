@@ -87,6 +87,7 @@ qt_add_qml_module(hesh
         qml/Main.qml
         qml/components/AgentMenuActions.qml
         qml/components/AndroidPanel.qml
+        qml/components/PhoneMenu.qml
         qml/components/AppButton.qml
         qml/components/AccentPicker.qml
         qml/components/DeviceFrame.qml

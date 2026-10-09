@@ -1,0 +1,10 @@
+#!/bin/sh
+# Right-click on a Hesh phone window (scrcpy) opens Hesh's phone menu.
+# Bound to the right mouse button from hesh.lua without consuming the click.
+win=$(hyprctl activewindow -j 2>/dev/null) || exit 0
+class=$(printf '%s' "$win" | jq -r '.class // empty')
+title=$(printf '%s' "$win" | jq -r '.title // empty')
+[ "$class" = "scrcpy" ] || exit 0
+case "$title" in *" — Hesh") ;; *) exit 0 ;; esac
+payload=$(jq -nc --arg t "$title" '{action:"android_menu",title:$t}')
+exec "${HOME}/.local/bin/hesh" --control "$payload" >/dev/null 2>&1
