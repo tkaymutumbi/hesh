@@ -56,6 +56,8 @@ target_link_libraries(hesh_core
 qt_add_executable(hesh
     src/main.cpp
     src/automation/Automation.cpp
+    src/app/SurfaceProbe.cpp
+    src/app/SurfaceProbe.hpp
     src/automation/Automation.hpp
     src/web/BrowserProfiles.cpp
     src/web/BrowserProfiles.hpp
@@ -89,6 +91,7 @@ qt_add_qml_module(hesh
         qml/components/AndroidPanel.qml
         qml/components/PhoneMenu.qml
         qml/components/AppButton.qml
+        qml/components/BlackFrameGuard.qml
         qml/components/AccentPicker.qml
         qml/components/DeviceFrame.qml
         qml/components/StandaloneDeviceWindow.qml

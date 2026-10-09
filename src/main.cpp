@@ -51,6 +51,7 @@ static int sendControl(const QJsonObject& request)
 
 #include "app/Application.hpp"
 #include "app/Preferences.hpp"
+#include "app/SurfaceProbe.hpp"
 #include "devices/Device.hpp"
 #include "web/BrowserProfiles.hpp"
 #include "web/WebDevice.hpp"
@@ -139,6 +140,9 @@ int main(int argc, char* argv[])
 
     Hesh::BrowserProfiles browserProfiles;
     qmlRegisterSingletonInstance("Hesh", 1, 0, "BrowserProfiles", &browserProfiles);
+
+    Hesh::SurfaceProbe surfaceProbe;
+    qmlRegisterSingletonInstance("Hesh", 1, 0, "SurfaceProbe", &surfaceProbe);
 
     Hesh::Automation automation;
     qmlRegisterSingletonInstance("Hesh", 1, 0, "Automation", &automation);

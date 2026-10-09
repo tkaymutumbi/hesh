@@ -456,6 +456,11 @@ Item {
     }
 
     Connections {
+        target: SurfaceProbe
+        function onDesktopChanged() { if (root.visible) Qt.callLater(root.recoverSurface) }
+    }
+
+    Connections {
         target: root.device
 
         function onContentThemeChanged() {
@@ -861,6 +866,18 @@ Item {
                     if (staged.length === 0) return
                     request.accepted = true
                     request.dialogAccept(staged)
+                }
+                BlackFrameGuard {
+                    target: webView
+                    running: root.visible && root.presentationVisible && root.pageLoaded && !root.pageLoading && !root.pageFailed
+                    onWake: function(strikes) {
+                        root.recoverSurface()
+                        // A plain repaint did not take: bounce the view through Frozen.
+                        if (strikes > 1) {
+                            webView.lifecycleState = WebEngineView.LifecycleState.Frozen
+                            Qt.callLater(root.ensureActive)
+                        }
+                    }
                 }
                 onVisibleChanged: if (visible) Qt.callLater(root.recoverSurface)
                 onLifecycleStateChanged: {

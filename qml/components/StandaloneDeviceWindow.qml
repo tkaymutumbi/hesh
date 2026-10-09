@@ -132,6 +132,13 @@ Window {
 
     SurfaceKeepAlive { running: root.visible }
 
+    // Switching workspaces gives Qt no visibility event, but the surface comes
+    // back stale. Wake it as soon as the compositor says the desktop changed.
+    Connections {
+        target: SurfaceProbe
+        function onDesktopChanged() { root.scheduleSurfaceRecovery() }
+    }
+
     onVisibilityChanged: root.scheduleSurfaceRecovery()
     onScreenChanged: root.scheduleSurfaceRecovery()
     onWidthChanged: root.scheduleSurfaceRecovery()
@@ -294,6 +301,15 @@ Window {
                     devToolsThemeTimer.attempts = 0
                     devToolsThemeTimer.restart()
                 }
+            }
+        }
+
+        BlackFrameGuard {
+            target: standaloneDevTools
+            running: devToolsWindow.visible
+            onWake: function(strikes) {
+                standaloneDevTools.lifecycleState = WebEngineView.LifecycleState.Active
+                standaloneDevTools.zoomFactor = standaloneDevTools.zoomFactor === 1.0 ? 1.001 : 1.0
             }
         }
 
