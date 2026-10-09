@@ -145,9 +145,12 @@ Item {
       focusable: false
       WlrLayershell.layer: WlrLayer.Overlay
       WlrLayershell.namespace: "hesh-agent"
+      // Only the circle (and the box while it is open) takes the pointer. The
+      // parent region must not be empty-but-full: give it the circle and add the
+      // box as a child, falling back to the circle when the box is closed.
       mask: Region {
-        Region { item: bubbleItem }
-        Region { item: box }
+        item: bubbleItem
+        Region { item: win.open ? box : bubbleItem }
       }
       onVisibleChanged: if (!visible) open = false
 
