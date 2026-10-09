@@ -180,6 +180,8 @@ class Backend:
         wm = self.adb(serial, "shell", "wm", "size")
         size = re.search(r"(\d+)x(\d+)", wm)
         width, height = (int(size.group(1)), int(size.group(2))) if size else (1080, 2400)
+        if action == "ui" and info.get("mode") == "dark":
+            return {"ok": False, "error": "The phone screen is off, so Android cannot list elements. Switch the device to Mirror, or tap by position and use screenshot."}
         if action == "ui":
             return {"ok": True, "screen": {"width": width, "height": height}, "elements": self.elements(serial)}
         if action == "screenshot":

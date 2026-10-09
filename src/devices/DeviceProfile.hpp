@@ -47,6 +47,8 @@ struct DeviceRecord
     QString contentTheme;
     // Android devices only: the phone's adb serial.
     QString serial;
+    // Android screen mode: "mirror" or "dark" (the phone's own screen is off).
+    QString mode;
 };
 
 QJsonObject deviceRecordToJson(const DeviceRecord& record);

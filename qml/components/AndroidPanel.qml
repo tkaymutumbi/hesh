@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import Hesh 1.0
 
@@ -18,7 +19,7 @@ Rectangle {
         function onScreenshotSaved(path) { root.note = "Saved " + path.split("/").pop() }
     }
 
-    implicitWidth: 380
+    implicitWidth: 400
     implicitHeight: 470
     width: 380
     height: 470
@@ -66,6 +67,42 @@ Rectangle {
             color: Theme.textMuted
             font.pixelSize: 11
             font.family: "monospace"
+        }
+        ColumnLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 6
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: "SCREEN"
+                color: Theme.textMuted
+                font.pixelSize: 10
+                font.weight: Font.DemiBold
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 6
+                Repeater {
+                    model: [["Mirror", "mirror"], ["Phone screen off", "dark"]]
+                    AppButton {
+                        required property var modelData
+                        text: modelData[0]
+                        compact: true
+                        secondary: !root.device || root.device.mode !== modelData[1]
+                        onClicked: root.device.setMode(modelData[1])
+                    }
+                }
+            }
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 300
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+                color: Theme.textMuted
+                font.pixelSize: 10
+                text: !root.device ? ""
+                    : root.device.mode === "dark" ? "The phone's own screen is off while Hesh controls it. Agents can tap, type and take screenshots but cannot list elements."
+                    : "Shows and controls the phone's real screen."
+            }
         }
         GridLayout {
             Layout.alignment: Qt.AlignHCenter

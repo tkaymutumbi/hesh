@@ -321,6 +321,14 @@ hesh --control '{"action":"pair","address":"192.168.1.20:37099","code":"123456"}
 hesh --control '{"action":"create","type":"android","name":"My phone","serial":"SERIAL"}'
 ```
 
+Screen modes (workspace panel or `{"action":"android_mode","id":"…","mode":"mirror|dark"}`):
+**Mirror** shows the phone's screen; **Phone screen off** turns the phone's own
+display off while Hesh keeps controlling it. With the screen off Android cannot
+list on-screen elements, so agents tap by position and take screenshots. The
+mirror window is tied to Hesh and closes with it. scrcpy's separate virtual
+display is not offered: TECNO's Android 14 sends apps started there back to the
+phone's own screen.
+
 On the mirror window: drag to swipe, scroll wheel to scroll, right-click is Back,
 middle-click is Home, Ctrl+drag pinches, Alt+S Recents, Alt+N notifications,
 Alt+P power, Alt+Up/Down volume. The workspace panel also has Back, Home,

@@ -263,7 +263,7 @@ Device* DeviceManager::createAndroidDevice(const QString& requestedName, const Q
     }
     const auto name = requestedName.trimmed().isEmpty() ? QStringLiteral("Phone") : requestedName.trimmed();
     auto* device = new AndroidDevice(
-        QUuid::createUuid().toString(QUuid::WithoutBraces), name, DeviceProfile::fromName(profileName), phoneSerial, this);
+        QUuid::createUuid().toString(QUuid::WithoutBraces), name, DeviceProfile::fromName(profileName), phoneSerial, QString(), this);
     addDevice(device, true);
     device->start();
     persist();
@@ -387,7 +387,8 @@ void DeviceManager::load()
                 // An emulator device from an earlier build; emulators are no longer supported.
                 continue;
             }
-            device = new AndroidDevice(record.id, record.name, DeviceProfile::fromName(record.profileName), record.serial, this);
+            device = new AndroidDevice(record.id, record.name, DeviceProfile::fromName(record.profileName), record.serial,
+                                       record.mode, this);
         } else {
             device = new WebDevice(record.id,
                                    record.name,
@@ -463,6 +464,7 @@ void DeviceManager::persist() const
         }
         if (const auto* android = qobject_cast<const AndroidDevice*>(device)) {
             record.serial = android->serial();
+            record.mode = android->mode();
         }
         records.append(record);
     }

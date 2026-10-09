@@ -65,6 +65,7 @@ QJsonObject deviceRecordToJson(const DeviceRecord& record)
         {QStringLiteral("running"), record.running},
         {QStringLiteral("contentTheme"), record.contentTheme},
         {QStringLiteral("serial"), record.serial},
+        {QStringLiteral("mode"), record.mode},
     };
 }
 
@@ -92,6 +93,7 @@ std::optional<DeviceRecord> deviceRecordFromJson(const QJsonObject& object)
     // unknown or empty value to "system" as well.
     record.contentTheme = object.value(QStringLiteral("contentTheme")).toString();
     record.serial = object.value(QStringLiteral("serial")).toString();
+    record.mode = object.value(QStringLiteral("mode")).toString();
     return record;
 }
 

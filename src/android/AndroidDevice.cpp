@@ -9,6 +9,9 @@
 
 #include <functional>
 
+#include <signal.h>
+#include <sys/prctl.h>
+
 namespace Hesh {
 
 QString AndroidDevice::adbPath()
@@ -51,10 +54,14 @@ QStringList AndroidDevice::pairingCandidates()
     return found;
 }
 
-AndroidDevice::AndroidDevice(QString id, QString name, DeviceProfile profile, QString serial, QObject* parent)
+AndroidDevice::AndroidDevice(QString id, QString name, DeviceProfile profile, QString serial,
+                             QString mode, QObject* parent)
     : Device(std::move(id), std::move(name), DeviceType::Android, std::move(profile), parent)
     , m_serial(std::move(serial))
+    , m_mode(mode == QLatin1String("dark") ? std::move(mode) : QStringLiteral("mirror"))
 {
+    // The mirror must never outlive Hesh, even when Hesh is killed.
+    m_screen.setChildProcessModifier([] { prctl(PR_SET_PDEATHSIG, SIGTERM); });
     connect(&m_screen, &QProcess::finished, this, [this] {
         // Closing the mirror window leaves the phone untouched; the panel can reopen it.
         if (status() == Status::Running) setDetail(QStringLiteral("Screen window closed"));
@@ -109,11 +116,25 @@ void AndroidDevice::openScreen()
     if (m_screen.state() != QProcess::NotRunning) return;
     // The title follows the web devices' "<name> — Hesh" so the window floats
     // and the shell overlay can find and frame it.
-    m_screen.start(QStringLiteral("scrcpy"),
-                   {QStringLiteral("-s"), m_serial, QStringLiteral("--window-title"),
-                    name() + QStringLiteral(" — Hesh"), QStringLiteral("--no-audio"),
-                    QStringLiteral("--max-fps"), QStringLiteral("60"),
-                    QStringLiteral("--window-width"), QStringLiteral("300"), QStringLiteral("--window-height"), QStringLiteral("600")});
+    QStringList arguments{QStringLiteral("-s"), m_serial, QStringLiteral("--window-title"),
+                          name() + QStringLiteral(" \u2014 Hesh"), QStringLiteral("--no-audio"),
+                          QStringLiteral("--max-fps"), QStringLiteral("60"),
+                          QStringLiteral("--window-width"), QStringLiteral("300"), QStringLiteral("--window-height"), QStringLiteral("600")};
+    if (m_mode == QLatin1String("dark")) arguments << QStringLiteral("--turn-screen-off");
+    m_screen.start(QStringLiteral("scrcpy"), arguments);
+}
+
+void AndroidDevice::setMode(const QString& mode)
+{
+    const auto next = mode == QLatin1String("dark") ? mode : QStringLiteral("mirror");
+    if (next == m_mode) return;
+    m_mode = next;
+    emit modeChanged();
+    emit dataChanged();
+    if (status() == Status::Running) {
+        if (m_screen.state() != QProcess::NotRunning) { m_screen.terminate(); m_screen.waitForFinished(2000); }
+        openScreen();
+    }
 }
 
 void AndroidDevice::showScreen()

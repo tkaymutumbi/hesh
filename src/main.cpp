@@ -316,10 +316,19 @@ int main(int argc, char* argv[])
                     }
                 } else if (!device) {
                     reply = {{"ok", false}, {"error", "Device not found"}};
+                } else if (action == "android_mode") {
+                    auto* android = qobject_cast<Hesh::AndroidDevice*>(device);
+                    if (!android) reply = {{"ok", false}, {"error", "Not an Android device"}};
+                    else android->setMode(request.value("mode").toString());
                 } else if (action == "android_info") {
                     auto* android = qobject_cast<Hesh::AndroidDevice*>(device);
                     if (!android) reply = {{"ok", false}, {"error", "Not an Android device"}};
-                    else reply.insert("serial", android->serial()), reply.insert("status", android->statusName());
+                    else {
+                        reply.insert("serial", android->serial());
+                        reply.insert("status", android->statusName());
+                        reply.insert("mode", android->mode());
+                        reply.insert("title", android->name() + QStringLiteral(" \u2014 Hesh"));
+                    }
                 } else if (action == "context") {
                     reply.insert("context", automation.deviceContext(device, automation.presentation(id)));
                     reply.insert("prompt", automation.agentPrompt(device, automation.presentation(id)));
