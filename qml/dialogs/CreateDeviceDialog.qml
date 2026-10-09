@@ -15,7 +15,7 @@ Popup {
     // Stay inside the window on narrow workspaces instead of clipping the
     // fields and the action buttons.
     width: Math.min(560, (Overlay.overlay ? Overlay.overlay.width : 560) - 40)
-    height: Math.min(kindCombo.currentIndex === 1 ? 700 : 560, (Overlay.overlay ? Overlay.overlay.height : 560) - 40)
+    height: Math.min(kindCombo.currentIndex === 1 ? 720 : 560, (Overlay.overlay ? Overlay.overlay.height : 560) - 40)
     padding: 0
 
     Overlay.modal: Rectangle { color: "#99080a0e" }
@@ -54,12 +54,34 @@ Popup {
         return 0
     }
 
+    property bool manualPairing: false
+    property string qrPath: ""
+    property int qrStamp: 0
+
+    function startQr() {
+        if (!root.manager) return
+        root.qrPath = root.manager.startQrPairing()
+        root.qrStamp += 1
+        root.phoneMessage = root.qrPath.length > 0 ? "" : root.manager.qrPairingMessage()
+        root.phoneOk = false
+    }
+
+    Connections {
+        target: root.manager
+        function onQrPairingChanged() {
+            const state = root.manager.qrPairingState()
+            if (state === "paired") { root.phoneOk = true; root.phoneMessage = "Paired"; root.scanPhones() }
+            else if (state === "failed" || state === "expired") { root.phoneOk = false; root.phoneMessage = root.manager.qrPairingMessage() }
+        }
+    }
+
     property string phoneMessage: ""
     property bool phoneOk: false
 
     function scanPhones() {
         if (!root.manager) return
         phoneCombo.phones = root.manager.connectedPhones()
+        phoneCombo.currentIndex = Math.max(0, phoneCombo.phones.length - 1)
         const offered = root.manager.pairingCandidates()
         if (offered.length > 0 && pairAddress.text.length === 0) pairAddress.text = offered[0].split("|")[0]
     }
@@ -73,8 +95,8 @@ Popup {
         }
     }
 
-    onOpened: { reset(); kindCombo.currentIndex = 0; root.phoneMessage = ""; pairAddress.text = ""; pairCode.text = ""; root.scanPhones() }
-    onClosed: reset()
+    onOpened: { reset(); kindCombo.currentIndex = 0; root.manualPairing = false; root.phoneMessage = ""; pairAddress.text = ""; pairCode.text = ""; root.scanPhones() }
+    onClosed: { reset(); if (root.manager) root.manager.cancelQrPairing() }
 
     ColumnLayout {
         anchors.fill: parent
@@ -117,6 +139,10 @@ Popup {
                 implicitHeight: 38
                 model: ["Web page", "My phone (over adb)"]
                 font.pixelSize: 12
+                onCurrentIndexChanged: {
+                    if (currentIndex === 1 && root.opened) root.startQr()
+                    else if (root.manager) root.manager.cancelQrPairing()
+                }
             }
 
             ColumnLayout {
@@ -145,7 +171,55 @@ Popup {
                     }
                 }
 
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 14
+                    visible: !root.manualPairing
+
+                    Rectangle {
+                        Layout.preferredWidth: 150
+                        Layout.preferredHeight: 150
+                        radius: Theme.radiusSmall
+                        color: "white"
+                        Image {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            source: root.qrPath.length > 0 ? "file://" + root.qrPath + "?" + root.qrStamp : ""
+                            cache: false
+                            smooth: false
+                            fillMode: Image.PreserveAspectFit
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Text {
+                            Layout.fillWidth: true
+                            text: "Scan to pair"
+                            color: Theme.text
+                            font.pixelSize: 13
+                            font.weight: Font.Medium
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "On the phone: Developer options, Wireless debugging, Pair device with QR code. Point it at this code."
+                            color: Theme.textMuted
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+
                 Text {
+                    text: root.manualPairing ? "Use the QR code instead" : "Use a pairing code instead"
+                    color: Theme.accent
+                    font.pixelSize: 11
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.manualPairing = !root.manualPairing }
+                }
+
+                Text {
+                    visible: root.manualPairing
                     text: "Pair over Wi-Fi: on the phone open Developer options, Wireless debugging, Pair device with pairing code."
                     color: Theme.textMuted
                     font.pixelSize: 11
@@ -156,6 +230,7 @@ Popup {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
+                    visible: root.manualPairing
                     TextField {
                         id: pairAddress
                         Layout.fillWidth: true

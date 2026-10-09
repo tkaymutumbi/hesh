@@ -8,6 +8,10 @@
 #include "app/Settings.hpp"
 #include "web/WebDevice.hpp"
 #include "android/AndroidDevice.hpp"
+#include <QFile>
+#include <QStandardPaths>
+#include <QRandomGenerator>
+#include <QProcess>
 
 namespace Hesh {
 
@@ -168,6 +172,87 @@ void DeviceManager::pairPhone(const QString& address, const QString& code)
 void DeviceManager::connectPhone(const QString& address)
 {
     AdbPairing::connectTo(address, this, [this](bool ok, QString message) { emit phoneActionFinished(ok, message); });
+}
+
+void DeviceManager::setQrState(const QString& state, const QString& message)
+{
+    m_qrState = state;
+    m_qrMessage = message;
+    emit qrPairingChanged();
+}
+
+QString DeviceManager::startQrPairing()
+{
+    if (QStandardPaths::findExecutable(QStringLiteral("qrencode")).isEmpty()) {
+        setQrState(QStringLiteral("failed"), QStringLiteral("Install qrencode to pair with a QR code"));
+        return {};
+    }
+    const auto token = [](int length, const QString& alphabet) {
+        QString out;
+        for (int i = 0; i < length; ++i) out += alphabet.at(int(QRandomGenerator::system()->bounded(alphabet.size())));
+        return out;
+    };
+    const auto letters = QStringLiteral("abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789");
+    m_qrName = QStringLiteral("hesh-") + token(6, letters);
+    m_qrPassword = token(12, letters);
+    const auto path = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + QStringLiteral("/hesh-pair-qr.png");
+    QProcess qr;
+    qr.start(QStringLiteral("qrencode"), QStringList{QStringLiteral("-t"), QStringLiteral("PNG"), QStringLiteral("-s"), QStringLiteral("8"),
+                                          QStringLiteral("-m"), QStringLiteral("2"), QStringLiteral("-o"), path,
+                                          QStringLiteral("WIFI:T:ADB;S:%1;P:%2;;").arg(m_qrName, m_qrPassword)});
+    if (!qr.waitForFinished(5000) || qr.exitCode() != 0) {
+        setQrState(QStringLiteral("failed"), QStringLiteral("Could not make the QR code"));
+        return {};
+    }
+    m_qrChecks = 0;
+    m_qrBusy = false;
+    if (!m_qrTimer.isActive()) {
+        m_qrTimer.setInterval(1500);
+        connect(&m_qrTimer, &QTimer::timeout, this, &DeviceManager::pollQrPairing, Qt::UniqueConnection);
+    }
+    m_qrTimer.start();
+    setQrState(QStringLiteral("waiting"), QStringLiteral("Scan the code from Wireless debugging on the phone"));
+    return path;
+}
+
+void DeviceManager::cancelQrPairing()
+{
+    m_qrTimer.stop();
+    m_qrPassword.clear();
+    QFile::remove(QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + QStringLiteral("/hesh-pair-qr.png"));
+    if (m_qrState == QLatin1String("waiting")) setQrState(QStringLiteral("idle"), QString());
+}
+
+void DeviceManager::pollQrPairing()
+{
+    if (m_qrBusy) return;
+    if (++m_qrChecks > 80) {
+        m_qrTimer.stop();
+        setQrState(QStringLiteral("expired"), QStringLiteral("The code expired. Open the form again for a new one."));
+        return;
+    }
+    m_qrBusy = true;
+    auto* p = new QProcess(this);
+    connect(p, &QProcess::finished, this, [this, p] {
+        p->deleteLater();
+        QString address;
+        for (const auto& line : QString::fromUtf8(p->readAllStandardOutput()).split(QLatin1Char('\n'))) {
+            if (!line.contains(QLatin1String("_adb-tls-pairing"))) continue;
+            const auto parts = line.simplified().split(QLatin1Char(' '));
+            if (parts.size() >= 3 && parts.first() == m_qrName) address = parts.last();
+        }
+        if (address.isEmpty() || !m_qrTimer.isActive()) { m_qrBusy = false; return; }
+        m_qrTimer.stop();
+        setQrState(QStringLiteral("waiting"), QStringLiteral("Pairing…"));
+        AdbPairing::run({QStringLiteral("pair"), address, m_qrPassword}, this, [this](bool ok, QString message) {
+            m_qrBusy = false;
+            m_qrPassword.clear();
+            setQrState(ok ? QStringLiteral("paired") : QStringLiteral("failed"),
+                       ok ? QStringLiteral("Paired") : message);
+            emit phoneActionFinished(ok, ok ? QStringLiteral("Paired") : message);
+        }, QStringLiteral("Successfully paired"));
+    });
+    p->start(AndroidDevice::adbPath(), {QStringLiteral("mdns"), QStringLiteral("services")});
 }
 
 Device* DeviceManager::createAndroidDevice(const QString& requestedName, const QString& profileName,

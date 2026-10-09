@@ -57,6 +57,8 @@ private:
 // Wireless debugging helpers used by the app, the control socket and the plugin.
 // Each runs adb and calls back with (ok, message).
 namespace AdbPairing {
+void run(const QStringList& arguments, QObject* context, std::function<void(bool, QString)> done,
+         const QString& okMarker);
 void pair(const QString& address, const QString& code, QObject* context,
           std::function<void(bool, QString)> done);
 void connectTo(const QString& address, QObject* context, std::function<void(bool, QString)> done);

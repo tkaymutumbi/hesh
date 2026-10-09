@@ -48,8 +48,46 @@ Panel {
     property bool phoneOk: false
     function parseReply(text) { try { return JSON.parse(String(text)) } catch (e) { return {ok: false, error: "No answer from Hesh"} } }
     function scanPhones() { if (hostWidget && !phonesProc.running) phonesProc.running = true }
-    onCreatingChanged: if (creating) { phoneMessage = ""; scanPhones() }
-    onKindChanged: if (kind === "phone") scanPhones()
+    property string qrPath: ""
+    property int qrStamp: 0
+    property bool manual: false
+    property bool justPaired: false
+    function startQr() { phoneMessage = ""; if (!qrStart.running) qrStart.running = true }
+    function stopQr() { if (qrPath.length > 0 || qrStart.running) qrCancel.running = true; qrPath = "" }
+    onCreatingChanged: { if (creating) { phoneMessage = ""; scanPhones(); if (kind === "phone") startQr() } else stopQr() }
+    onKindChanged: { if (kind === "phone") { scanPhones(); if (creating) startQr() } else stopQr() }
+    onManualChanged: { if (manual) stopQr(); else if (creating && kind === "phone") startQr() }
+    Process {
+        id: qrStart
+        command: [root.hostWidget ? root.hostWidget.executable : "", "--control", '{"action":"pair_qr_start"}']
+        stdout: StdioCollector { id: qrStartOut; waitForEnd: true }
+        onExited: {
+            var r = root.parseReply(qrStartOut.text)
+            root.qrPath = r.qr || ""
+            root.qrStamp++
+            if (!r.qr) { root.phoneOk = false; root.phoneMessage = r.error || "Could not make the QR code" }
+        }
+    }
+    Process {
+        id: qrStatus
+        command: [root.hostWidget ? root.hostWidget.executable : "", "--control", '{"action":"pair_qr_status"}']
+        stdout: StdioCollector { id: qrStatusOut; waitForEnd: true }
+        onExited: {
+            var r = root.parseReply(qrStatusOut.text)
+            if (r.state === "paired") { root.phoneOk = true; root.phoneMessage = "Paired"; root.qrPath = ""; root.justPaired = true; root.scanPhones() }
+            else if (r.state === "failed" || r.state === "expired") { root.phoneOk = false; root.phoneMessage = r.message || "Pairing failed"; root.qrPath = "" }
+        }
+    }
+    Process {
+        id: qrCancel
+        command: [root.hostWidget ? root.hostWidget.executable : "", "--control", '{"action":"pair_qr_cancel"}']
+    }
+    Timer {
+        interval: 1200
+        repeat: true
+        running: root.creating && root.kind === "phone" && root.qrPath.length > 0 && !root.manual
+        onTriggered: if (!qrStatus.running) qrStatus.running = true
+    }
     Process {
         id: phonesProc
         command: [root.hostWidget ? root.hostWidget.executable : "", "--control", '{"action":"phones"}']
@@ -59,6 +97,7 @@ Panel {
             root.phones = r.phones || []
             root.pairing = r.pairing || []
             if (root.pairing.length > 0 && pairAddress.text.length === 0) pairAddress.text = root.pairing[0].address
+            if (root.justPaired && root.phones.length > 0) { root.justPaired = false; phoneSelect.currentIndex = root.phones.length - 1 }
         }
     }
     Process {
@@ -533,7 +572,48 @@ Panel {
                             }
                             Btn { reload: true; tip: "Look for phones"; onClicked: root.scanPhones() }
                         }
+                        // QR pairing: the phone scans this from Wireless debugging.
+                        RowLayout {
+                            visible: !root.manual
+                            Layout.fillWidth: true
+                            spacing: 12
+                            Rectangle {
+                                Layout.preferredWidth: 128
+                                Layout.preferredHeight: 128
+                                radius: root.corner > 0 ? 8 : 0
+                                color: "white"
+                                Image {
+                                    anchors.fill: parent
+                                    anchors.margins: 4
+                                    source: root.qrPath.length > 0 ? "file://" + root.qrPath + "?" + root.qrStamp : ""
+                                    cache: false
+                                    smooth: false
+                                    fillMode: Image.PreserveAspectFit
+                                }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 4
+                                Text { text: "Scan to pair"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: 12; font.bold: true }
+                                Text {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    color: root.dim
+                                    font.family: root.fontFamily
+                                    font.pixelSize: 10
+                                    text: "On the phone: Developer options, Wireless debugging, Pair device with QR code."
+                                }
+                            }
+                        }
                         Text {
+                            text: root.manual ? "Use the QR code instead" : "Use a pairing code instead"
+                            color: root.accent
+                            font.family: root.fontFamily
+                            font.pixelSize: 10
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.manual = !root.manual }
+                        }
+                        Text {
+                            visible: root.manual
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             color: root.dim
@@ -541,9 +621,10 @@ Panel {
                             font.pixelSize: 10
                             text: root.pairing.length > 0
                                 ? "A phone is showing a pairing code. Type it below."
-                                : "Not listed? On the phone open Developer options, Wireless debugging, Pair device with pairing code."
+                                : "On the phone: Wireless debugging, Pair device with pairing code."
                         }
                         RowLayout {
+                            visible: root.manual
                             Layout.fillWidth: true
                             spacing: 6
                             Field { id: pairAddress; Layout.fillWidth: true; placeholderText: "Pairing address  192.168.1.20:37099" }
@@ -562,6 +643,7 @@ Panel {
                             }
                             Item { Layout.fillWidth: root.phoneMessage.length === 0 }
                             Btn {
+                                visible: root.manual
                                 text: "Pair"
                                 enabled: !pairProc.running && pairAddress.text.trim().length > 0 && pairCode.text.trim().length === 6
                                 onClicked: root.pairNow()

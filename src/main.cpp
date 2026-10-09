@@ -279,6 +279,15 @@ int main(int argc, char* argv[])
                     }
                     reply.insert("phones", phones);
                     reply.insert("pairing", pairing);
+                } else if (action == "pair_qr_start") {
+                    const auto path = manager->startQrPairing();
+                    if (path.isEmpty()) reply = {{"ok", false}, {"error", manager->qrPairingMessage()}};
+                    else reply.insert("qr", path);
+                } else if (action == "pair_qr_status") {
+                    reply.insert("state", manager->qrPairingState());
+                    reply.insert("message", manager->qrPairingMessage());
+                } else if (action == "pair_qr_cancel") {
+                    manager->cancelQrPairing();
                 } else if (action == "pair" || action == "connect") {
                     auto done = [socket](bool ok, QString message) {
                         if (socket->state() != QLocalSocket::ConnectedState) return;

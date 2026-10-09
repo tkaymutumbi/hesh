@@ -156,7 +156,7 @@ void AndroidDevice::screenshot()
 
 namespace AdbPairing {
 
-static void run(const QStringList& arguments, QObject* context, std::function<void(bool, QString)> done,
+void run(const QStringList& arguments, QObject* context, std::function<void(bool, QString)> done,
                 const QString& okMarker)
 {
     auto* p = new QProcess(context);

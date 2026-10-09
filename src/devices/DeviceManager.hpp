@@ -3,6 +3,7 @@
 #include <QAbstractListModel>
 #include <QList>
 #include <QObject>
+#include <QTimer>
 #include <QVariantList>
 
 #include "Device.hpp"
@@ -75,6 +76,16 @@ public:
     // Wireless debugging. The result arrives through phoneActionFinished.
     Q_INVOKABLE void pairPhone(const QString& address, const QString& code);
     Q_INVOKABLE void connectPhone(const QString& address);
+    // Pair by QR code: shows a code the phone scans from Wireless debugging,
+    // "Pair device with QR code". The phone then advertises a pairing service
+    // under the code's name, which Hesh finds over mDNS and pairs with.
+    // startQrPairing() returns the path of the code image (empty if it cannot
+    // be made); qrPairingState() is "idle", "waiting", "paired", "failed" or
+    // "expired".
+    Q_INVOKABLE QString startQrPairing();
+    Q_INVOKABLE void cancelQrPairing();
+    Q_INVOKABLE QString qrPairingState() const { return m_qrState; }
+    Q_INVOKABLE QString qrPairingMessage() const { return m_qrMessage; }
     Q_INVOKABLE void removeDevice(const QString& id);
     Q_INVOKABLE void clearDeviceData(const QString& id);
     Q_INVOKABLE void clearAllDeviceData();
@@ -89,11 +100,18 @@ public:
     Q_INVOKABLE void stopDevice(const QString& id);
 
 signals:
+    void qrPairingChanged();
     void phoneActionFinished(bool ok, const QString& message);
     void selectedDeviceChanged();
     void deviceCountChanged();
 
 private:
+    void pollQrPairing();
+    void setQrState(const QString& state, const QString& message);
+    QTimer m_qrTimer;
+    QString m_qrName, m_qrPassword, m_qrState = QStringLiteral("idle"), m_qrMessage;
+    int m_qrChecks = 0;
+    bool m_qrBusy = false;
     void load();
     void addDevice(Device* device, bool select);
     void persist() const;

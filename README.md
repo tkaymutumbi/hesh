@@ -311,10 +311,11 @@ the mirror. Requires `adb` and `scrcpy`.
 
 Add one from Create Device (**My phone**) or the bar plugin's **+** (**My phone**).
 To pair over Wi-Fi, open Developer options, Wireless debugging, **Pair device with
-pairing code** on the phone. Hesh lists the phone it finds and you type the
-six-digit code. From the shell:
+QR code** on the phone and scan the code Hesh shows (needs `qrencode`). Typing a
+pairing code instead is optional: use **Use a pairing code instead**. From the shell:
 
 ```bash
+hesh --control '{"action":"pair_qr_start"}'                              # writes a QR image; poll pair_qr_status
 hesh --control '{"action":"phones"}'                                   # connected phones and pairing offers
 hesh --control '{"action":"pair","address":"192.168.1.20:37099","code":"123456"}'
 hesh --control '{"action":"create","type":"android","name":"My phone","serial":"SERIAL"}'
