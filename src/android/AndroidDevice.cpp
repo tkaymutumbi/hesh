@@ -211,8 +211,9 @@ void AndroidDevice::pollBoot()
             m_bootTimer.stop();
             // Without a GPU, Android renders in software, and the Google apps that
             // ship in the image (Messages, Search, Photos, on-device AI...) keep
-            // several cores at full load even when idle. Disable them once the
-            // device is up, hide error boxes and shorten animations.
+            // several cores at full load even when idle. Disable them, and the
+            // other apps a development device does not need (mail, calendar, clock,
+            // dialer, accessibility, printing), once the device is up, hide error boxes and shorten animations.
             tool(sdkRoot() + QStringLiteral("/platform-tools/adb"),
                  {QStringLiteral("-s"), serial(), QStringLiteral("shell"),
                   QStringLiteral("settings put global hide_error_dialogs 1; settings put global window_animation_scale 0.5; "
@@ -222,7 +223,14 @@ void AndroidDevice::pollBoot()
                                  "com.google.android.apps.youtube.music com.google.android.apps.wellbeing com.google.android.apps.nbu.files "
                                  "com.google.android.googlequicksearchbox com.google.android.apps.docs com.google.android.apps.turbo "
                                  "com.google.android.apps.restore com.google.android.apps.tachyon com.google.android.videos "
-                                 "com.google.android.music; do pm disable-user --user 0 $p; done")});
+                                 "com.google.android.music com.google.android.calendar com.google.android.contacts com.google.android.deskclock "
+                                 "com.google.android.gm com.google.android.apps.safetyhub com.android.stk com.google.android.dialer "
+                                 "com.google.android.marvin.talkback com.google.android.marvin.talkbackoverlay "
+                                 "com.google.android.healthconnect.controller com.google.android.health.connect.backuprestore "
+                                 "com.google.android.markup com.google.android.avatarpicker com.android.printspooler com.android.bips "
+                                 "com.android.traceur com.google.android.ondevicepersonalization.services "
+                                 "com.google.android.federatedcompute com.google.android.feedback com.google.android.odad; "
+                                 "do pm disable-user --user 0 $p; done")});
             setDetail(QString());
             setStatus(Status::Running);
             openScreen();
