@@ -11,6 +11,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QDateTime>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -229,7 +231,8 @@ void Automation::execute(const QString& token, const QJsonObject& command) {
     if (m_pending.contains(token)) { emit finished(token, error("Duplicate request token")); return; }
     const QString action = command.value("action").toString();
     const QString id = command.value("id").toString();
-    const bool page = action == "inspect" || action == "interact" || action == "credential_fill";
+    const bool page = action == "inspect" || action == "interact" || action == "credential_fill"
+        || action == "screenshot" || action == "eval";
     if (command.value("agent").toBool() && m_paused) { emit finished(token, error("AI control is paused in Hesh")); return; }
     if (page && m_busyDevices.contains(id)) { emit finished(token, error("Device is busy; retry after the current operation")); return; }
     m_pending.insert(token, page ? id : QString());
@@ -253,7 +256,11 @@ void Automation::execute(const QString& token, const QJsonObject& command) {
             m_state = previous; finish(token, error("Memory exceeds 2 MiB or could not be saved")); return;
         }
         finish(token, {{"ok", true}});
+    } else if (action == "console") {
+        finish(token, readConsole(command));
     } else if (action.startsWith("credential_")) vault(token, command);
+    else if (action == "screenshot") captureScreenshot(token, command);
+    else if (action == "eval") runEval(token, command);
     else if (page) {
         QJsonObject prepared = command;
         const QString problem = action == "interact" ? prepareUploads(id, prepared) : QString();
@@ -272,6 +279,92 @@ void Automation::runPage(const QString& token, const QJsonObject& command) {
     if (m_script.isEmpty()) { finish(token, error("Automation script unavailable")); return; }
     const QString script = "(" + m_script + ")(" + QString::fromUtf8(QJsonDocument(command).toJson(QJsonDocument::Compact)) + ")";
     if (!QMetaObject::invokeMethod(surface, "automationRun", Q_ARG(QVariant, token), Q_ARG(QVariant, script)))
+        finish(token, error("Browser surface unavailable"));
+}
+
+static constexpr int kConsoleLimit = 500;
+void Automation::noteConsole(const QString& id, int level, const QString& message, int line, const QString& source) {
+    if (id.isEmpty()) return;
+    auto& list = m_console[id];
+    list.append(QJsonObject{{"time", QDateTime::currentMSecsSinceEpoch()},
+        {"level", level >= 2 ? "error" : level == 1 ? "warning" : "info"},
+        {"message", message.left(2000)}, {"line", line}, {"source", source.left(200)}});
+    while (list.size() > kConsoleLimit) list.removeFirst();
+}
+// Reads the buffered console of a device. Works in the background: it needs no
+// open preview, only that the device's page has been loaded at some point.
+QJsonObject Automation::readConsole(const QJsonObject& command) {
+    const QString id = command.value("id").toString();
+    const QString level = command.value("level").toString("all");
+    if (level != "all" && level != "warning" && level != "error") return error("level must be all, warning or error");
+    QRegularExpression pattern;
+    const QString text = command.value("pattern").toString();
+    if (!text.isEmpty()) {
+        if (text.size() > 200) return error("pattern is limited to 200 characters");
+        pattern = QRegularExpression(text, QRegularExpression::CaseInsensitiveOption);
+        if (!pattern.isValid()) return error("pattern is not a valid regular expression");
+    }
+    const qint64 since = static_cast<qint64>(command.value("since").toDouble(0));
+    const int limit = qBound(1, command.value("limit").toInt(50), 200);
+    const auto& all = m_console.value(id);
+    QJsonArray matched;
+    for (const auto& entry : all) {
+        const QString entryLevel = entry.value("level").toString();
+        if (level == "error" && entryLevel != "error") continue;
+        if (level == "warning" && entryLevel == "info") continue;
+        if (static_cast<qint64>(entry.value("time").toDouble()) < since) continue;
+        if (!text.isEmpty() && !pattern.match(entry.value("message").toString()).hasMatch()) continue;
+        matched.append(entry);
+    }
+    const int total = matched.size();
+    QJsonArray out;
+    for (int i = qMax(0, total - limit); i < total; ++i) out.append(matched.at(i));
+    if (command.value("clear").toBool()) m_console.remove(id);
+    return {{"ok", true}, {"messages", out}, {"matched", total}, {"buffered", all.size()}, {"cleared", command.value("clear").toBool()}};
+}
+static QString shotPath(const QString& id, const QJsonObject& command, QString& problem) {
+    QString path = command.value("path").toString();
+    if (path.isEmpty())
+        return QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + "/hesh-shot-" + id.left(8) + "-"
+            + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmsszzz") + ".png";
+    if (!QDir::isAbsolutePath(path) || !path.endsWith(".png", Qt::CaseInsensitive)) { problem = "path must be an absolute .png path"; return {}; }
+    const QFileInfo info(path);
+    if (!info.dir().exists()) { problem = "The folder for path does not exist"; return {}; }
+    const QString dir = QFileInfo(info.dir().absolutePath()).canonicalFilePath();
+    for (const auto& part : (dir + "/" + info.fileName()).split('/', Qt::SkipEmptyParts))
+        if (part.startsWith('.')) { problem = "Screenshots cannot be saved inside hidden folders"; return {}; }
+    return dir + "/" + info.fileName();
+}
+// Renders the page content only (no window chrome and none of the AI-control
+// overlay, which the shell draws outside this window) to a PNG.
+void Automation::captureScreenshot(const QString& token, const QJsonObject& command) {
+    if (command.value("agent").toBool() && m_paused) { finish(token, error("AI control is paused in Hesh")); return; }
+    const auto surface = m_surfaces.value(command.value("id").toString());
+    if (!surface || surface->property("frameState").toString() != "ready" || !surface->property("presentationVisible").toBool()) {
+        finish(token, error("Page is not ready; open the device preview and retry")); return;
+    }
+    QString problem;
+    const QString path = shotPath(command.value("id").toString(), command, problem);
+    if (!problem.isEmpty()) { finish(token, error(problem)); return; }
+    if (!QMetaObject::invokeMethod(surface, "automationScreenshot", Q_ARG(QVariant, token), Q_ARG(QVariant, path)))
+        finish(token, error("Browser surface unavailable"));
+}
+// Runs an expression in the page (async-aware, up to ten seconds) and returns
+// its JSON-serialisable value. world "page" sees the page's own globals;
+// "isolated" sees only the DOM and storage.
+void Automation::runEval(const QString& token, const QJsonObject& command) {
+    if (command.value("agent").toBool() && m_paused) { finish(token, error("AI control is paused in Hesh")); return; }
+    const auto surface = m_surfaces.value(command.value("id").toString());
+    if (!surface || surface->property("frameState").toString() != "ready") {
+        finish(token, error("Page is not ready; open the device preview and retry")); return;
+    }
+    const QString expression = command.value("expression").toString();
+    if (expression.isEmpty() || expression.size() > 20000) { finish(token, error("expression must be 1-20000 characters")); return; }
+    const QString world = command.value("world").toString("page");
+    if (world != "page" && world != "isolated") { finish(token, error("world must be page or isolated")); return; }
+    const int timeout = qBound(500, command.value("timeoutMs").toInt(8000), 10000);
+    if (!QMetaObject::invokeMethod(surface, "automationEval", Q_ARG(QVariant, token), Q_ARG(QVariant, expression),
+            Q_ARG(QVariant, world == "page" ? 0 : 1), Q_ARG(QVariant, timeout)))
         finish(token, error("Browser surface unavailable"));
 }
 void Automation::vault(const QString& token, const QJsonObject& command) {

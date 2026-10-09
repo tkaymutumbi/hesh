@@ -16,6 +16,108 @@ Item {
             Automation.complete(token, typeof result === "string" ? result : "")
         })
     }
+    // Page content only (no window chrome, no agent overlay), rendered at the
+    // size the page is actually rasterised at (visual size x window pixel ratio).
+    function automationScreenshot(token, path) {
+        var dpr = root.Window.window ? root.Window.window.devicePixelRatio : 1
+        var size = Qt.size(Math.max(1, Math.round(webView.width * dpr)), Math.max(1, Math.round(webView.height * dpr)))
+        // The compositor sends no frames to a window on a workspace that is not
+        // showing, so Qt cannot render it. Give up quickly with a clear message
+        // instead of leaving the call to time out.
+        var waiting = shotWatch.waiting
+        waiting[token] = Date.now() + 3000
+        shotWatch.waiting = waiting
+        shotWatch.start()
+        webView.grabToImage(function(result) {
+            if (!shotWatch.waiting[token]) return
+            delete shotWatch.waiting[token]
+            var saved = result && result.saveToFile(path)
+            Automation.complete(token, JSON.stringify(saved
+                ? {ok: true, path: path, width: size.width, height: size.height}
+                : {ok: false, error: "Could not render or save the screenshot"}))
+        }, size)
+    }
+    Timer {
+        id: shotWatch
+        interval: 250
+        repeat: true
+        property var waiting: ({})
+        onTriggered: {
+            var now = Date.now()
+            var any = false
+            for (var token in waiting) {
+                any = true
+                if (now > waiting[token]) {
+                    delete waiting[token]
+                    Automation.complete(token, JSON.stringify({ok: false, error:
+                        "The device window is not being drawn, probably because it is on a workspace that is not showing. Switch to that workspace (or move the window to the current one) and retry. Inspect, interact, eval and console work from any workspace."}))
+                }
+            }
+            if (!any) stop()
+        }
+    }
+    // Evaluates an expression in the page, awaiting a returned promise. World 0
+    // is the page's own JavaScript world, 1 the isolated application world.
+    function automationEval(token, expression, world, timeoutMs) {
+        var key = "__hesh_eval_" + token.replace(/[^A-Za-z0-9_]/g, "")
+        var script = "(function(){var o={done:false};window[" + JSON.stringify(key) + "]=o;"
+            + "var ser=function(v){if(v===undefined)return null;var t=JSON.stringify(v);"
+            + "if(t===undefined)return String(v);if(t.length>200000)throw Error('Result is larger than 200000 characters');return JSON.parse(t)};"
+            + "var ok=function(v){try{o.value=ser(v);o.ok=true}catch(e){o.ok=false;o.error=String(e&&e.message||e)}o.done=true};"
+            + "var bad=function(e){o.ok=false;o.error=String(e&&e.message||e);o.done=true};"
+            // Pages with a strict Content-Security-Policy refuse eval. In the page world an
+            // expression is then run through an inline script element, which that policy
+            // usually still allows; its value is handed back through a temporary global.
+            + "var run=function(code){try{return (0,eval)(code)}catch(e){"
+            + "if(" + (world === 0 ? "true" : "false") + "&&/unsafe-eval|Content Security Policy/i.test(String(e&&e.message))){"
+            + "var k=" + JSON.stringify(key + "_v") + ";var el=document.createElement('script');"
+            + "el.textContent='window['+JSON.stringify(k)+']={v:('+code+')}';(document.head||document.documentElement).appendChild(el);el.remove();"
+            + "var h=window[k];delete window[k];if(h)return h.v}throw e}};"
+            + "try{Promise.resolve(run(" + JSON.stringify(expression) + ")).then(ok,bad)}catch(e){bad(e)}return 'started'})()"
+        webView.runJavaScript(script, world, function(started) {
+            if (started !== "started") {
+                Automation.complete(token, JSON.stringify({ok: false, error: "The page could not run the expression"}))
+                return
+            }
+            var jobs = evalPoll.jobs
+            jobs[token] = {key: key, world: world, deadline: Date.now() + timeoutMs, busy: false}
+            evalPoll.jobs = jobs
+            evalPoll.start()
+        })
+    }
+    Timer {
+        id: evalPoll
+        interval: 80
+        repeat: true
+        property var jobs: ({})
+        onTriggered: {
+            var now = Date.now()
+            var any = false
+            for (var token in jobs) {
+                any = true
+                var job = jobs[token]
+                if (job.busy) continue
+                if (now > job.deadline) {
+                    delete jobs[token]
+                    Automation.complete(token, JSON.stringify({ok: false, error: "The expression did not finish in time"}))
+                    continue
+                }
+                job.busy = true
+                var read = "(function(){var o=window[" + JSON.stringify(job.key) + "];if(!o||!o.done)return '';delete window["
+                    + JSON.stringify(job.key) + "];return JSON.stringify(o)})()"
+                webView.runJavaScript(read, job.world, (function(t, j) {
+                    return function(res) {
+                        j.busy = false
+                        if (typeof res === "string" && res.length > 0 && evalPoll.jobs[t]) {
+                            delete evalPoll.jobs[t]
+                            Automation.complete(t, res)
+                        }
+                    }
+                })(token, job))
+            }
+            if (!any) stop()
+        }
+    }
 
     property var device: null
     // Optional DeviceManager, used by the stopped state to start the device
@@ -840,6 +942,10 @@ Item {
                 id: webView
                 anchors.fill: parent
                 z: 0
+                // Always buffered, so agents can read the console later in the background.
+                onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID) {
+                    if (root.device) Automation.noteConsole(root.device.id, level, message, lineNumber, sourceID)
+                }
                 url: root.profileReady && root.device && root.device.status === "Running"
                      ? root.device.url : "about:blank"
                 // Render directly at visual size: zoom = presentationScale

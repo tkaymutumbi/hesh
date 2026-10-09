@@ -13,11 +13,12 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / "build/hesh"
-HTML = b'''<!doctype html><title>MCP fixture</title><body><h1>Test app</h1>
+HTML = b'''<!doctype html><meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline'"><title>MCP fixture</title><body><h1>Test app</h1>
 <form><label for="email">Email</label><input id="email" type="email" autocomplete="username">
 <label for="password">Password</label><input id="password" type="password">
 <button id="submit" type="button" onclick="document.querySelector('#result').textContent=document.querySelector('#email').value + (document.querySelector('#password').value==='dummy-test-password' ? ' LOGIN_OK' : ' CLICK_OK')">Sign in</button></form>
-<button class="duplicate">One</button><button class="duplicate">Two</button><p id="result"></p></body>'''
+<button class="duplicate">One</button><button class="duplicate">Two</button><p id="result"></p>
+<script>window.fixtureState = {answer: 42}; console.log('fixture-log'); console.warn('fixture-warn'); console.error('fixture-error');</script></body>'''
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -97,7 +98,7 @@ path.write_text(json.dumps(values))
             init = rpc("initialize", {"protocolVersion": "2025-11-25", "clientInfo": {"name": "MCP test"}})
             assert init["result"]["protocolVersion"] == "2025-11-25"
             mcp.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n'); mcp.stdin.flush()
-            assert len(rpc("tools/list")["result"]["tools"]) == 5
+            assert len(rpc("tools/list")["result"]["tools"]) == 9
             assert rpc("tools/call", {"name": "hesh_devices", "arguments": {"action": "clear"}})["error"]["code"] == -32602
             assert call("hesh_memory", action="put", key="test/task", value={"status": "remember me"})["ok"]
             assert call("hesh_memory", action="get", key="test/task")["value"]["status"] == "remember me"
@@ -115,6 +116,30 @@ path.write_text(json.dumps(values))
             assert device in context["prompt"] and "hesh_inspect" in context["prompt"]
             assert "standalone window" in context["prompt"]
             assert any(e["selector"] == "#email" for e in page["page"]["elements"])
+            # Console is buffered from page load, filterable, and clearable.
+            logs = call("hesh_console", id=device)
+            assert logs["ok"] and {"fixture-log", "fixture-warn", "fixture-error"} <= {m["message"] for m in logs["messages"]}, logs
+            assert [m["message"] for m in call("hesh_console", id=device, level="error")["messages"]] == ["fixture-error"]
+            assert {m["level"] for m in call("hesh_console", id=device, level="warning")["messages"]} == {"warning", "error"}
+            assert [m["message"] for m in call("hesh_console", id=device, pattern="LOG$")["messages"]] == ["fixture-log"]
+            assert not call("hesh_console", id=device, pattern="(")["ok"]
+            assert call("hesh_console", id=device, clear=True)["ok"]
+            assert call("hesh_console", id=device)["messages"] == []
+            # Eval: page globals, isolated world, promises, errors.
+            assert call("hesh_eval", id=device, expression="window.fixtureState.answer")["value"] == 42
+            assert call("hesh_eval", id=device, expression="Promise.resolve({a: [1, 2]})")["value"] == {"a": [1, 2]}
+            assert call("hesh_eval", id=device, expression="typeof window.fixtureState", world="isolated")["value"] == "undefined"
+            assert call("hesh_eval", id=device, expression="document.title")["value"] == "MCP fixture"
+            assert not call("hesh_eval", id=device, expression="nope.nope")["ok"]
+            assert not call("hesh_eval", id=device, expression="new Promise(() => {})", timeoutMs=600)["ok"]
+            # Screenshot: PNG of the page content, saved to the requested path.
+            shot_path = str(Path(folder) / "shot.png")
+            shot = call("hesh_devices", action="screenshot", id=device, path=shot_path)
+            assert shot["ok"] and shot["path"] == shot_path and shot["width"] > 0 and shot["bytes"] > 1000, shot
+            assert Path(shot_path).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+            assert not call("hesh_devices", action="screenshot", id=device, path="relative.png")["ok"]
+            assert not call("hesh_devices", action="screenshot", id=device, path=str(Path(folder) / "x.jpg"))["ok"]
+            assert rpc("tools/call", {"name": "hesh_devices", "arguments": {"action": "delete", "id": device}})["error"]["code"] == -32602
             started = time.monotonic()
             result = call("hesh_interact", id=device, steps=[{"action": "fill", "selector": "#email", "value": "agent@example.com"}, {"action": "click", "selector": "#submit"}])
             elapsed = (time.monotonic() - started) * 1000

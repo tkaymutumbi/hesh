@@ -30,6 +30,9 @@ public:
     Q_INVOKABLE void registerSurface(const QString& id, QObject* surface);
     Q_INVOKABLE void unregisterSurface(const QString& id, QObject* surface);
     Q_INVOKABLE void complete(const QString& token, const QString& result);
+    // Page console output, kept per device while Hesh runs so agents can read it
+    // after the fact, with or without an active agent session.
+    Q_INVOKABLE void noteConsole(const QString& id, int level, const QString& message, int line, const QString& source);
     Q_INVOKABLE void request(const QString& token, const QVariantMap& command);
     Q_INVOKABLE QVariantList accounts() const;
     // Files an agent staged for the next native file picker (one use).
@@ -49,6 +52,9 @@ signals:
 private:
     void finish(const QString& token, const QJsonObject& reply);
     void runPage(const QString& token, const QJsonObject& command);
+    void captureScreenshot(const QString& token, const QJsonObject& command);
+    void runEval(const QString& token, const QJsonObject& command);
+    QJsonObject readConsole(const QJsonObject& command);
     QString prepareUploads(const QString& id, QJsonObject& command);
     void vault(const QString& token, const QJsonObject& command);
     bool saveState();
@@ -59,6 +65,7 @@ private:
     QHash<QString, QString> m_pending;
     QSet<QString> m_busyDevices;
     QHash<QString, QStringList> m_staged;
+    QHash<QString, QList<QJsonObject>> m_console;
     QJsonObject m_state;
     QString m_path, m_script, m_activeDevice, m_activity;
     QString m_client, m_task, m_lastDevice;

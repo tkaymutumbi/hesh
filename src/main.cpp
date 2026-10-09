@@ -227,6 +227,7 @@ int main(int argc, char* argv[])
                 auto* root = engine.rootObjects().constFirst();
                 const bool agent = request.value("agent").toBool();
                 const bool automationAction = action == "inspect" || action == "interact"
+                    || action == "console" || action == "screenshot" || action == "eval"
                     || action.startsWith("memory_") || action.startsWith("credential_");
                 if (action.startsWith("agent_")) {
                     reply = automation.session(action.mid(6), request, agent);

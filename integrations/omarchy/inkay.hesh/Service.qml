@@ -9,6 +9,7 @@ import qs.Commons
 // Overlay for Hesh AI control. It exists only while the agent has an active
 // session (hesh_session start .. done) or is paused, and only around the Hesh
 // window the agent is working in, on the workspace that is currently showing.
+// Switching workspace or focus dismisses it until the session ends.
 // The glow is drawn outside the window edge. A small circle sits on the window's
 // side edge and opens a box with the agent's controls; everything else is
 // click-through, so no page content is ever covered.
@@ -24,6 +25,11 @@ Item {
   readonly property color amber: "#efbd75"
 
   property bool active: false
+  // Set when the user changes workspace, focus or window placement during an
+  // agent session: the overlay then stays hidden for the rest of that session
+  // so it never follows the user around or draws over what they are doing. It
+  // only changes how the overlay looks; agent control is unaffected.
+  property bool dismissed: false
   property bool paused: false
   property string pausedBy: ""
   property string client: ""
@@ -40,6 +46,7 @@ Item {
     var data = {}
     try { data = JSON.parse(String(text)) } catch (e) { data = {} }
     active = data.active === true
+    if (!active) dismissed = false
     paused = data.paused === true
     pausedBy = data.pausedBy || ""
     client = data.client || ""
@@ -60,7 +67,7 @@ Item {
   // device (or any Hesh standalone window when the device is unknown), else
   // the main window. Only windows on a workspace that is visible right now.
   function poll() {
-    if (!active) { targets = []; return }
+    if (!active || dismissed) { targets = []; return }
     if (!lookup.running) lookup.running = true
   }
   function locate(text) {
@@ -97,8 +104,8 @@ Item {
       if (n === "workspace" || n === "workspacev2" || n === "focusedmon" || n === "focusedmonv2"
           || n === "activespecial" || n === "activespecialv2" || n === "movewindow" || n === "movewindowv2"
           || n === "closewindow") {
+        if (root.active) root.dismissed = true
         if (root.targets.length > 0) root.targets = []
-        root.poll()
       }
     }
   }

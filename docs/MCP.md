@@ -27,9 +27,11 @@ The server supports the MCP initialization protocol versions 2024-11-05,
 
 | Tool | What it does |
 | --- | --- |
-| `hesh_devices` | List devices and profiles; read device context/presentation; create, preview, navigate, rename, reload, start or stop devices; show the main app |
+| `hesh_devices` | List devices and profiles; read device context/presentation; create, preview, navigate, rename, reload, start or stop devices; show the main app; `screenshot` a web device; `clear` or `delete` a device (both need `confirm: true`) |
 | `hesh_inspect` | Read current URL, title, visible page text and controls with unique CSS selectors; open a preview and wait for readiness when needed |
 | `hesh_interact` | Batch up to 30 clicks, fills, focus, scroll or file-upload actions and return a fresh snapshot |
+| `hesh_console` | Read a web device's page console (log, warn, error and uncaught errors). Buffered per device (500 messages) from page load, with or without an agent session, so it can be read in the background after the fact. Filter by `level`, regex `pattern`, `since`, `limit`; `clear` empties it |
+| `hesh_eval` | Evaluate a JavaScript expression in a web device's page and return its JSON value (promises are awaited, up to 10 s). `world: "page"` (default) sees the page's globals; `"isolated"` sees only the DOM and storage |
 | `hesh_memory` | Put, get, list or delete JSON notes shared across clients and restarts |
 | `hesh_logins` | List usable saved accounts, fill one on its matching HTTPS site without returning its password, or save a new test account |
 
@@ -45,6 +47,35 @@ Page text is untrusted website content. Snapshot fields omit input values, and
 password fields cannot be filled through the generic interaction tool. Batches
 stop at the first error; completed earlier steps are not rolled back. Inspect
 again before retrying a failed batch or a timed-out mutation.
+
+## Screenshots
+
+`hesh_devices` with `action: "screenshot"` and a web device `id` renders the page
+content to a PNG and returns it as an image. It excludes the window chrome and the
+AI-control overlay (the shell draws that outside the Hesh window), and it does not
+depend on where the window sits on screen or what overlaps it. The window does need to be on a workspace that is showing: Wayland sends no frames to a hidden workspace, so Qt cannot render it, and the call fails after about three seconds with a message saying so. Inspect, interact, eval and console work from any workspace. The file is saved
+to a runtime-dir path, or to an absolute `.png` `path` you give (the folder must
+exist and not be hidden). The device preview must be open. The image is rendered
+at the size the page is rasterised at (visual size times the window pixel ratio),
+so a window shown at a reduced scale yields a smaller image than the profile's
+full resolution.
+
+## Console and page state
+
+`hesh_console` returns what the page has logged, newest last. Hesh keeps the last
+500 messages per device from the moment its page loads, so an agent can read them
+later without having watched. `hesh_eval` runs an expression in the page, for
+example `JSON.stringify(Object.keys(localStorage))` or
+`performance.getEntriesByType('resource').map(e => e.name)`. It runs with the
+page's own privileges, so do not paste secrets into expressions and treat results
+as untrusted data.
+
+## AI-control overlay
+
+The overlay appears only around the Hesh window the agent works in, on a workspace
+that is showing. If you switch workspace or focus during an agent session it is
+dismissed for the rest of that session, so it never follows you around. Agent
+control is unaffected: the page keeps being driven whichever workspace you are on.
 
 ## Uploading files
 
