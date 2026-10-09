@@ -58,7 +58,33 @@ function(command) {
         for (let i = 0; i < command.steps.length; i++) {
             try {
                 const step = command.steps[i];
-                if (step.action === 'scroll') {
+                if (step.action === 'stage') {
+                    // Paths were staged natively for the page's next file picker.
+                } else if (step.action === 'upload') {
+                    const matches = [...document.querySelectorAll(step.selector)];
+                    if (matches.length !== 1) throw Error('Selector must match exactly one element; found ' + matches.length);
+                    const target = matches[0];
+                    if (!Array.isArray(step.files) || !step.files.length) throw Error('No files to upload');
+                    const list = new DataTransfer();
+                    for (const f of step.files) {
+                        const bytes = Uint8Array.from(atob(f.data), c => c.charCodeAt(0));
+                        list.items.add(new File([bytes], f.name, {type: f.type}));
+                    }
+                    if (target instanceof HTMLInputElement && target.type === 'file') {
+                        if (target.disabled) throw Error('File input is disabled');
+                        if (list.files.length > 1 && !target.multiple) throw Error('This input accepts a single file');
+                        target.files = list.files;
+                        target.dispatchEvent(new Event('input', {bubbles: true}));
+                        target.dispatchEvent(new Event('change', {bubbles: true}));
+                    } else {
+                        // A drop zone: replay the drag sequence with the files.
+                        const rect = target.getBoundingClientRect();
+                        for (const type of ['dragenter', 'dragover', 'drop']) {
+                            target.dispatchEvent(new DragEvent(type, {bubbles: true, cancelable: true, dataTransfer: list,
+                                clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2}));
+                        }
+                    }
+                } else if (step.action === 'scroll') {
                     const target = step.selector ? find(step.selector) : window;
                     target.scrollBy({left: Math.max(-10000, Math.min(10000, Number(step.x) || 0)), top: Math.max(-10000, Math.min(10000, Number(step.y) || 0)), behavior: 'instant'});
                 } else {

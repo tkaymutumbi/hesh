@@ -102,8 +102,9 @@ qt_add_qml_module(hesh
         qml/components/SettingSwitch.qml
         qml/components/SettingsGlyph.qml
         qml/components/StatusBadge.qml
+        qml/components/SurfaceKeepAlive.qml
         qml/dialogs/ClearDeviceDataDialog.qml
-        qml/dialogs/CredentialsDialog.qml
+        qml/dialogs/LoginsWindow.qml
         qml/dialogs/CreateDeviceDialog.qml
         qml/dialogs/SettingsDialog.qml
         qml/pages/DeviceWorkspace.qml

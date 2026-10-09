@@ -259,7 +259,8 @@ int main(int argc, char* argv[])
                     reply.insert("devices", devices);
                     reply.insert("profiles", QJsonArray::fromVariantList(manager->availableProfiles()));
                 } else if (action == "show" || action == "background" || action == "logins") {
-                    QMetaObject::invokeMethod(root, action == "show" ? "showMainWindow" : action == "logins" ? "showLogins" : "enableBackground");
+                    if (action == "logins") QMetaObject::invokeMethod(root, "showLogins", Q_ARG(QVariant, id));
+                    else QMetaObject::invokeMethod(root, action == "show" ? "showMainWindow" : "enableBackground");
                 } else if (action == "create" && request.value("type").toString() == "android") {
                     const auto name = request.value("name").toString().trimmed();
                     const auto serial = request.value("serial").toString().trimmed();

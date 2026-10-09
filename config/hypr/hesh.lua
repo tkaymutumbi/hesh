@@ -20,6 +20,14 @@ o.window({ title = "^Hesh$" }, {
   opacity = "1 1",
 })
 
+-- The logins window is a normal floating window and must take focus to type.
+o.window({ title = "^Hesh logins — Hesh$" }, {
+  float = true,
+  center = true,
+  no_dim = true,
+  no_initial_focus = false,
+})
+
 -- The phone menu opens at the pointer.
 o.window({ title = "^Hesh phone menu — Hesh$" }, {
   float = true,

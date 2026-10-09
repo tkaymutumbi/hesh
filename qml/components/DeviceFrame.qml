@@ -854,6 +854,14 @@ Item {
                 lifecycleState: WebEngineView.LifecycleState.Active
                 // Keep rendering active even when briefly detached during
                 // Loader recreation or Wayland output changes.
+                // Files an agent staged for this device answer the next native
+                // picker; otherwise the normal dialog opens.
+                onFileDialogRequested: function(request) {
+                    var staged = root.device ? Automation.takeStagedFiles(root.device.id) : []
+                    if (staged.length === 0) return
+                    request.accepted = true
+                    request.dialogAccept(staged)
+                }
                 onVisibleChanged: if (visible) Qt.callLater(root.recoverSurface)
                 onLifecycleStateChanged: {
                     if (root.visible && lifecycleState !== WebEngineView.LifecycleState.Active)

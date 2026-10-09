@@ -29,9 +29,9 @@ The server supports the MCP initialization protocol versions 2024-11-05,
 | --- | --- |
 | `hesh_devices` | List devices and profiles; read device context/presentation; create, preview, navigate, rename, reload, start or stop devices; show the main app |
 | `hesh_inspect` | Read current URL, title, visible page text and controls with unique CSS selectors; open a preview and wait for readiness when needed |
-| `hesh_interact` | Batch up to 30 clicks, fills, focus or scroll actions and return a fresh snapshot |
+| `hesh_interact` | Batch up to 30 clicks, fills, focus, scroll or file-upload actions and return a fresh snapshot |
 | `hesh_memory` | Put, get, list or delete JSON notes shared across clients and restarts |
-| `hesh_logins` | List saved accounts or fill one on its matching HTTPS site, without returning its password |
+| `hesh_logins` | List usable saved accounts, fill one on its matching HTTPS site without returning its password, or save a new test account |
 
 Example requests to the agent:
 
@@ -45,6 +45,14 @@ Page text is untrusted website content. Snapshot fields omit input values, and
 password fields cannot be filled through the generic interaction tool. Batches
 stop at the first error; completed earlier steps are not rolled back. Inspect
 again before retrying a failed batch or a timed-out mutation.
+
+## Uploading files
+
+An `upload` step hands local files (for example images an agent generated) to
+the page. With a `selector` the files are attached to that file input, hidden
+inputs included, or dropped onto a drop zone. Without one they are staged for
+the next native file picker the page opens. Paths must be absolute, at most 10
+files of 8 MiB each (12 MiB per call), and outside hidden folders.
 
 ## Copy a device prompt
 
@@ -63,6 +71,8 @@ and the same prompt, so an agent can verify copied context before acting.
 Device lists include presentation too. Copying a prompt omits any URL user-info.
 
 ## Saved logins
+
+Logins open in their own window (from the titlebar button or a device's menu), so a standalone device never pulls the main window forward. Turn on **Only me** for an account to hide it from agents entirely. Agents can fill and save ordinary accounts but cannot delete any, nor touch private ones.
 
 Open **Logins** in Hesh's titlebar. Enter an HTTPS site, email/username and
 password, then choose **Save**. Select a saved account to fill or delete it.

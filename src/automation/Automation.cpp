@@ -5,6 +5,8 @@
 #include "devices/Device.hpp"
 #include "web/WebDevice.hpp"
 #include <QDir>
+#include <QFileInfo>
+#include <QMimeDatabase>
 #include <QSaveFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -16,9 +18,13 @@ namespace Hesh {
 static QJsonObject error(const QString& message) { return {{"ok", false}, {"error", message}}; }
 static QString origin(const QString& address) {
     QUrl url(address);
-    if (!url.isValid() || url.scheme() != "https" || url.host().isEmpty()
-        || !url.userInfo().isEmpty()) return {};
-    if (url.port() == 443) url.setPort(-1);
+    // Plain HTTP is accepted only for this machine, so local dev servers work
+    // while real sites still need HTTPS.
+    const QString host = url.host().toLower();
+    const bool loopback = host == "localhost" || host.endsWith(".localhost") || host == "127.0.0.1" || host == "::1";
+    const bool allowed = url.scheme() == "https" || (url.scheme() == "http" && loopback);
+    if (!url.isValid() || !allowed || host.isEmpty() || !url.userInfo().isEmpty()) return {};
+    if ((url.scheme() == "https" && url.port() == 443) || (url.scheme() == "http" && url.port() == 80)) url.setPort(-1);
     return url.adjusted(QUrl::RemovePath | QUrl::RemoveQuery | QUrl::RemoveFragment).toString();
 }
 Automation::Automation(QObject* parent) : QObject(parent) {
@@ -166,6 +172,58 @@ bool Automation::saveState() {
     const auto bytes = QJsonDocument(m_state).toJson(QJsonDocument::Compact);
     return file.write(bytes) == bytes.size() && file.commit();
 }
+
+// An agent names local files to hand to a page. Only ordinary, reasonably small
+// files outside hidden directories are allowed, so a page cannot be used to
+// pull keys or configuration off the machine.
+static constexpr qint64 kUploadFileLimit = 8 * 1024 * 1024;
+static constexpr qint64 kUploadTotalLimit = 12 * 1024 * 1024;
+static QString checkUploadPath(const QString& path, QFileInfo& info) {
+    if (!QDir::isAbsolutePath(path)) return "Upload paths must be absolute: " + path;
+    info = QFileInfo(path);
+    if (!info.exists() || !info.isFile()) return "Not a file: " + path;
+    info = QFileInfo(info.canonicalFilePath());
+    if (!info.isReadable()) return "File is not readable: " + path;
+    if (info.size() <= 0 || info.size() > kUploadFileLimit) return "Files must be between 1 byte and 8 MiB: " + path;
+    for (const auto& part : info.absoluteFilePath().split('/', Qt::SkipEmptyParts))
+        if (part.startsWith('.')) return "Files in hidden folders cannot be uploaded: " + path;
+    return {};
+}
+QStringList Automation::takeStagedFiles(const QString& id) { return m_staged.take(id); }
+// Rewrites upload steps in place. With a selector the file contents travel with
+// the step; without one the paths are staged for the next native file picker.
+QString Automation::prepareUploads(const QString& id, QJsonObject& command) {
+    QJsonArray steps = command.value("steps").toArray();
+    qint64 total = 0;
+    for (int i = 0; i < steps.size(); ++i) {
+        QJsonObject step = steps.at(i).toObject();
+        if (step.value("action").toString() != "upload") continue;
+        const QJsonArray paths = step.value("paths").toArray();
+        if (paths.isEmpty() || paths.size() > 10) return "Upload needs 1–10 paths";
+        const bool direct = !step.value("selector").toString().isEmpty();
+        QJsonArray files;
+        QStringList staged;
+        for (const auto& value : paths) {
+            QFileInfo info;
+            if (const QString problem = checkUploadPath(value.toString(), info); !problem.isEmpty()) return problem;
+            total += info.size();
+            if (total > kUploadTotalLimit) return "Upload batch exceeds 12 MiB";
+            staged << info.absoluteFilePath();
+            if (!direct) continue;
+            QFile file(info.absoluteFilePath());
+            if (!file.open(QIODevice::ReadOnly)) return "Could not read " + info.fileName();
+            files.append(QJsonObject{{"name", info.fileName()},
+                {"type", QMimeDatabase().mimeTypeForFile(info).name()},
+                {"data", QString::fromLatin1(file.readAll().toBase64())}});
+        }
+        if (direct) step.insert("files", files);
+        else { m_staged.insert(id, staged); step.insert("action", "stage"); }
+        step.remove("paths");
+        steps[i] = step;
+    }
+    command.insert("steps", steps);
+    return {};
+}
 QVariantList Automation::accounts() const { return m_state.value("accounts").toArray().toVariantList(); }
 void Automation::execute(const QString& token, const QJsonObject& command) {
     if (m_pending.contains(token)) { emit finished(token, error("Duplicate request token")); return; }
@@ -196,7 +254,12 @@ void Automation::execute(const QString& token, const QJsonObject& command) {
         }
         finish(token, {{"ok", true}});
     } else if (action.startsWith("credential_")) vault(token, command);
-    else if (page) runPage(token, command);
+    else if (page) {
+        QJsonObject prepared = command;
+        const QString problem = action == "interact" ? prepareUploads(id, prepared) : QString();
+        if (!problem.isEmpty()) finish(token, error(problem));
+        else runPage(token, prepared);
+    }
     else finish(token, error("Unknown automation action"));
 }
 void Automation::runPage(const QString& token, const QJsonObject& command) {
@@ -213,19 +276,41 @@ void Automation::runPage(const QString& token, const QJsonObject& command) {
 }
 void Automation::vault(const QString& token, const QJsonObject& command) {
     const QString action = command.value("action").toString();
-    if (action == "credential_list") { finish(token, {{"ok", true}, {"accounts", m_state.value("accounts").toArray()}}); return; }
+    const bool byAgent = command.value("agent").toBool();
+    // An account marked private ("only me") is invisible to agents: not listed,
+    // not filled, not overwritten or replaced.
+    const auto isPrivate = [this](const QString& site, const QString& email) {
+        for (const auto& value : m_state.value("accounts").toArray()) {
+            const auto account = value.toObject();
+            if (account.value("origin") == site && account.value("email") == email) return account.value("private").toBool();
+        }
+        return false;
+    };
+    if (action == "credential_list") {
+        QJsonArray visible;
+        for (const auto& value : m_state.value("accounts").toArray())
+            if (!byAgent || !value.toObject().value("private").toBool()) visible.append(value);
+        finish(token, {{"ok", true}, {"accounts", visible}});
+        return;
+    }
     const QString site = origin(command.value("origin").toString());
     const QString email = command.value("email").toString().trimmed();
     const QString password = command.value("password").toString();
     if (site.isEmpty() || email.isEmpty() || email.size() > 320 || (action == "credential_save" && (password.isEmpty() || password.size() > 4096))) {
-        finish(token, error("An HTTPS origin, email and nonempty password are required")); return;
+        finish(token, error("An HTTPS (or localhost HTTP) origin, email and nonempty password are required")); return;
     }
     if (action != "credential_save" && action != "credential_delete" && action != "credential_fill") {
         finish(token, error("Unknown credential operation")); return;
     }
+    if (byAgent && isPrivate(site, email)) {
+        finish(token, error("That login is private to the user; ask them to use it or save a different test account")); return;
+    }
+    if (byAgent && action == "credential_delete") {
+        finish(token, error("Agents cannot delete saved logins")); return;
+    }
     const auto surface = m_surfaces.value(command.value("id").toString());
     if (action == "credential_fill" && (!surface || origin(surface->property("pageUrl").toString()) != site)) {
-        finish(token, error("Saved login can only be filled on its exact HTTPS origin")); return;
+        finish(token, error("Saved login can only be filled on its exact origin (HTTPS, or localhost HTTP)")); return;
     }
     const QString executable = QStandardPaths::findExecutable("secret-tool");
     if (executable.isEmpty()) { finish(token, error("Install libsecret secret-tool and unlock your desktop keyring")); return; }
@@ -239,7 +324,7 @@ void Automation::vault(const QString& token, const QJsonObject& command) {
         if (failure == QProcess::FailedToStart) process->deleteLater();
     });
     connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
-        [this, process, token, command, site, email, action](int code, QProcess::ExitStatus status) {
+        [this, process, token, command, site, email, action, byAgent](int code, QProcess::ExitStatus status) {
         const QByteArray secret = process->readAllStandardOutput();
         process->deleteLater();
         if (!m_pending.contains(token)) return;
@@ -258,7 +343,11 @@ void Automation::vault(const QString& token, const QJsonObject& command) {
         auto accounts = m_state.value("accounts").toArray();
         for (int i = accounts.size() - 1; i >= 0; --i)
             if (accounts[i].toObject().value("origin") == site && accounts[i].toObject().value("email") == email) accounts.removeAt(i);
-        if (action == "credential_save") accounts.append(QJsonObject{{"origin", site}, {"email", email}});
+        // Agent-saved accounts are never private; the user's choice applies
+        // only to saves made in Hesh itself.
+        if (action == "credential_save")
+            accounts.append(QJsonObject{{"origin", site}, {"email", email},
+                {"private", !byAgent && command.value("private").toBool()}, {"by", byAgent ? "agent" : "user"}});
         m_state.insert("accounts", accounts);
         if (!saveState()) { finish(token, error("Keyring updated, but account metadata could not be saved")); return; }
         finish(token, {{"ok", true}});

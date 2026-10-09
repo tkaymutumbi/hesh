@@ -32,6 +32,8 @@ public:
     Q_INVOKABLE void complete(const QString& token, const QString& result);
     Q_INVOKABLE void request(const QString& token, const QVariantMap& command);
     Q_INVOKABLE QVariantList accounts() const;
+    // Files an agent staged for the next native file picker (one use).
+    Q_INVOKABLE QStringList takeStagedFiles(const QString& id);
     Q_INVOKABLE void copyAgentPrompt(QObject* device, bool standalone);
     Q_INVOKABLE void copyDeviceId(const QString& id);
     Q_INVOKABLE void openLogins(const QString& id);
@@ -47,6 +49,7 @@ signals:
 private:
     void finish(const QString& token, const QJsonObject& reply);
     void runPage(const QString& token, const QJsonObject& command);
+    QString prepareUploads(const QString& id, QJsonObject& command);
     void vault(const QString& token, const QJsonObject& command);
     bool saveState();
     void publish();
@@ -55,6 +58,7 @@ private:
     QHash<QString, QPointer<QObject>> m_surfaces;
     QHash<QString, QString> m_pending;
     QSet<QString> m_busyDevices;
+    QHash<QString, QStringList> m_staged;
     QJsonObject m_state;
     QString m_path, m_script, m_activeDevice, m_activity;
     QString m_client, m_task, m_lastDevice;

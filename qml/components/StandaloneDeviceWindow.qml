@@ -130,6 +130,8 @@ Window {
         }
     }
 
+    SurfaceKeepAlive { running: root.visible }
+
     onVisibilityChanged: root.scheduleSurfaceRecovery()
     onScreenChanged: root.scheduleSurfaceRecovery()
     onWidthChanged: root.scheduleSurfaceRecovery()
@@ -279,6 +281,8 @@ Window {
         height: Math.max(480, root.height)
 
         onClosing: root.devToolsOpen = false
+
+        SurfaceKeepAlive { running: devToolsWindow.visible }
 
         WebEngineView {
             id: standaloneDevTools

@@ -32,7 +32,9 @@ ApplicationWindow {
         var phone = deviceManager.deviceById(id)
         if (phone) phoneMenu.openFor(phone)
     }
-    function showLogins() { showMainWindow(); credentialsDialog.open() }
+    // Logins open in their own window, so a standalone device never pulls the
+    // main window onto the screen.
+    function showLogins(id) { loginsWindow.openFor(id || (deviceManager.selectedDevice ? deviceManager.selectedDevice.id : "")) }
     // quiet: opened for an AI agent. The window appears without taking focus, so
     // the user's pointer and keyboard stay where they are.
     function previewDevice(id, quiet) {
@@ -55,7 +57,6 @@ ApplicationWindow {
     readonly property bool modalDialogOpen: createDeviceDialog.opened
                                             || clearDataDialog.opened
                                             || settingsDialog.opened
-                                            || credentialsDialog.opened
 
     // The palette is a plain value holder; the stored accent is pushed into it
     // from the one file that owns the window.
@@ -341,7 +342,7 @@ ApplicationWindow {
                         text: "Logins"
                         compact: true
                         secondary: true
-                        onClicked: credentialsDialog.open()
+                        onClicked: window.showLogins("")
                     }
 
                     AppButton {
@@ -445,12 +446,11 @@ ApplicationWindow {
     Connections {
         target: Automation
         function onLoginsRequested(id) {
-            if (id) deviceManager.selectDevice(id)
-            window.showLogins()
+            window.showLogins(id)
         }
     }
 
-    CredentialsDialog { id: credentialsDialog }
+    LoginsWindow { id: loginsWindow; manager: deviceManager }
     PhoneMenu { id: phoneMenu }
 
     SettingsDialog {
