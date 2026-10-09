@@ -1,70 +1,65 @@
 #pragma once
 
 #include <QProcess>
-#include <QTimer>
+
+#include <functional>
 
 #include "devices/Device.hpp"
 
 namespace Hesh {
 
-// A real Android device: the official Android Emulator (x86_64, KVM) running
-// headless, driven through adb. Hesh shows its screen with scrcpy, which also
-// carries mouse and keyboard input. Each device owns one AVD named after its id.
+// A real Android phone reached through adb (USB or wireless debugging). Hesh
+// mirrors its screen with scrcpy, which also carries mouse and keyboard input.
+// The phone itself is never rebooted, stopped or reconfigured: stopping the
+// device only closes the mirror window.
 class AndroidDevice final : public Device
 {
     Q_OBJECT
     Q_PROPERTY(QString serial READ serial CONSTANT)
-    Q_PROPERTY(QString flavor READ flavor CONSTANT)
     Q_PROPERTY(QString statusDetail READ statusDetail NOTIFY statusDetailChanged)
 
 public:
-    // flavor: "google" (Google APIs emulator), "light" (plain Android, no Google
-    // apps) or "phone" (a real handset reachable through adb, with its serial).
-    AndroidDevice(QString id, QString name, DeviceProfile profile, QString flavor,
-                  QString phoneSerial, QObject* parent = nullptr);
+    AndroidDevice(QString id, QString name, DeviceProfile profile, QString serial, QObject* parent = nullptr);
     ~AndroidDevice() override;
 
-    QString serial() const;
-    QString avdName() const;
-    QString flavor() const { return m_flavor; }
-    bool isPhone() const { return m_flavor == QLatin1String("phone"); }
-    QString systemImage() const;
-    // "serial|model" for each adb device that is a real handset.
-    Q_INVOKABLE static QStringList connectedPhones();
-    QString statusDetail() const;
-    static QString sdkRoot();
-    // Hesh keeps its virtual devices in its own data directory.
-    static QString avdHome();
-    // Why the Android runtime cannot be used on this machine, or empty.
-    QString missingRequirement() const;
+    QString serial() const { return m_serial; }
+    QString statusDetail() const { return m_detail; }
+    static QString adbPath();
+
+    // "serial|model" for every phone adb can reach right now.
+    static QStringList connectedPhones();
+    // "host:port|name" for phones that are showing a wireless-debugging pairing
+    // code, found through mDNS.
+    static QStringList pairingCandidates();
 
     void start() override;
     void stop() override;
     Q_INVOKABLE void showScreen();
+    // Hardware-style controls: back, home, recents, power, volume_up,
+    // volume_down, notifications. screenshot() saves a PNG to Pictures.
+    Q_INVOKABLE void press(const QString& control);
+    Q_INVOKABLE void screenshot();
 
 signals:
     void statusDetailChanged();
-
-protected:
-    void clearPersistentData() override;
+    void screenshotSaved(const QString& path);
 
 private:
     void setDetail(const QString& detail);
-    void launchEmulator();
-    void pollBoot();
     void openScreen();
-    void fail(const QString& message);
-    QProcess* tool(const QString& program, const QStringList& arguments);
+    QProcess* tool(const QStringList& arguments);
 
-    QString m_flavor;
-    QString m_phoneSerial;
-    int m_port = 5554;
+    QString m_serial;
     QString m_detail;
-    QProcess m_emulator;
     QProcess m_screen;
-    QTimer m_bootTimer;
-    int m_bootChecks = 0;
-    bool m_stopping = false;
 };
+
+// Wireless debugging helpers used by the app, the control socket and the plugin.
+// Each runs adb and calls back with (ok, message).
+namespace AdbPairing {
+void pair(const QString& address, const QString& code, QObject* context,
+          std::function<void(bool, QString)> done);
+void connectTo(const QString& address, QObject* context, std::function<void(bool, QString)> done);
+}
 
 } // namespace Hesh

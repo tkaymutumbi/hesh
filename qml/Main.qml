@@ -163,6 +163,8 @@ ApplicationWindow {
 
     function openStandaloneForDevice(device) {
         if (!device || !device.id) return
+        // Android devices are shown by scrcpy, not by a web window.
+        if (device.type === "ANDROID") { device.showScreen(); return }
         var deviceId = device.id
         var existing = window.standaloneWindows[deviceId]
         if (existing) {

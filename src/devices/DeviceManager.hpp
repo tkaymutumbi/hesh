@@ -67,9 +67,14 @@ public:
                                            const QString& profileName,
                                            const QString& url);
     Q_INVOKABLE Device* createAndroidDevice(const QString& name, const QString& profileName,
-                                            const QString& flavor = QStringLiteral("google"),
-                                            const QString& phoneSerial = QString());
+                                            const QString& phoneSerial);
+    // Phones adb can reach ("serial|model") and phones offering a wireless
+    // pairing code ("host:port|name").
     Q_INVOKABLE QStringList connectedPhones() const;
+    Q_INVOKABLE QStringList pairingCandidates() const;
+    // Wireless debugging. The result arrives through phoneActionFinished.
+    Q_INVOKABLE void pairPhone(const QString& address, const QString& code);
+    Q_INVOKABLE void connectPhone(const QString& address);
     Q_INVOKABLE void removeDevice(const QString& id);
     Q_INVOKABLE void clearDeviceData(const QString& id);
     Q_INVOKABLE void clearAllDeviceData();
@@ -84,6 +89,7 @@ public:
     Q_INVOKABLE void stopDevice(const QString& id);
 
 signals:
+    void phoneActionFinished(bool ok, const QString& message);
     void selectedDeviceChanged();
     void deviceCountChanged();
 

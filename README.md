@@ -301,28 +301,28 @@ minutes of silence. It loads together with the bar widget, so enabling `inkay.he
 The backend mirrors its state to `$XDG_RUNTIME_DIR/hesh-agent.json`. Control
 actions: `agent_start`, `agent_done`, `agent_pause`, `agent_resume`, `agent_status`.
 
-## Android devices
+## Android phones
 
-Create a device with **Real Android device (emulator)** ticked, or with
-`hesh --control '{"action":"create","type":"android","name":"Pixel"}'`. Hesh runs
-the official Android Emulator (Android 15, Google APIs, x86_64) headless under
-KVM and shows it in a 300x600 scrcpy window titled `<name> — Hesh`, so it floats
-like the web devices and gets the AI-control overlay. The first start creates the
-virtual device and takes a few minutes; later starts use a quick-boot snapshot.
+Hesh adds a real Android phone as a device and mirrors it with scrcpy in a
+300x600 floating window titled `<name> — Hesh`, so it gets the same overlay as
+web devices. The phone is reached through adb, over USB or wireless debugging,
+and is never rebooted, stopped or reconfigured: stopping the device only closes
+the mirror. Requires `adb` and `scrcpy`.
 
-Three kinds exist: **My phone**, which attaches to a handset already connected
-through adb (USB or wireless debugging) and just mirrors it with scrcpy, so it
-costs nothing extra; **Android emulator, light**, plain Android without Google
-apps (1.5 GB RAM, 3 cores); and **Android emulator, with Google apps**. Phones are
-never rebooted, stopped or altered: stopping one only closes the mirror window.
-
-Install the requirements once:
+Add one from Create Device (**My phone**) or the bar plugin's **+** (**My phone**).
+To pair over Wi-Fi, open Developer options, Wireless debugging, **Pair device with
+pairing code** on the phone. Hesh lists the phone it finds and you type the
+six-digit code. From the shell:
 
 ```bash
-sdkmanager "emulator" "system-images;android-35;default;x86_64" "system-images;android-35;google_apis;x86_64"   # plus scrcpy and /dev/kvm
+hesh --control '{"action":"phones"}'                                   # connected phones and pairing offers
+hesh --control '{"action":"pair","address":"192.168.1.20:37099","code":"123456"}'
+hesh --control '{"action":"create","type":"android","name":"My phone","serial":"SERIAL"}'
 ```
 
-Virtual devices live in Hesh's data folder. After boot Hesh disables the Google
-apps that otherwise keep several cores busy under software rendering, and hides
-error dialogs. Agents drive a device with `hesh_android` (`ui`, `tap`, `type`,
-`key`, `swipe`, `scroll`, `launch`, `install`, `screenshot`, `packages`).
+On the mirror window: drag to swipe, scroll wheel to scroll, right-click is Back,
+middle-click is Home, Ctrl+drag pinches, Alt+S Recents, Alt+N notifications,
+Alt+P power, Alt+Up/Down volume. The workspace panel also has Back, Home,
+Recents, Notifications, volume, Power and Screenshot buttons. Agents use
+`hesh_android` (`ui`, `tap`, `type`, `key`, `swipe`, `scroll`, `launch`,
+`install`, `screenshot`, `packages`).

@@ -11,12 +11,17 @@ Rectangle {
 
     // The web frame's shortcuts call these on whatever the workspace loaded.
     function reloadPage() {}
-    function takeScreenshot() {}
+    function takeScreenshot() { if (device) device.screenshot() }
+    property string note: ""
+    Connections {
+        target: root.device
+        function onScreenshotSaved(path) { root.note = "Saved " + path.split("/").pop() }
+    }
 
-    implicitWidth: 360
-    implicitHeight: 300
-    width: 360
-    height: 300
+    implicitWidth: 380
+    implicitHeight: 470
+    width: 380
+    height: 470
     radius: Theme.radiusMedium
     color: Theme.panel
     border.width: 1
@@ -38,7 +43,7 @@ Rectangle {
         }
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: root.status === "Running" ? "Android 15 · running"
+            text: root.status === "Running" ? "Phone · connected"
                 : root.status === "Starting" ? "Starting"
                 : root.status === "Error" ? "Cannot start" : "Stopped"
             color: root.status === "Error" ? Theme.warning : Theme.textMuted
@@ -61,6 +66,92 @@ Rectangle {
             color: Theme.textMuted
             font.pixelSize: 11
             font.family: "monospace"
+        }
+        GridLayout {
+            Layout.alignment: Qt.AlignHCenter
+            visible: root.status === "Running"
+            columns: 4
+            columnSpacing: 6
+            rowSpacing: 6
+            Repeater {
+                model: [["Back", "back"], ["Home", "home"], ["Recents", "recents"], ["Rotate", "rotate"],
+                        ["Vol +", "volume_up"], ["Vol -", "volume_down"], ["Power", "power"], ["Notifs", "notifications"]]
+                AppButton {
+                    required property var modelData
+                    text: modelData[0]
+                    secondary: true
+                    compact: true
+                    onClicked: root.device.press(modelData[1])
+                }
+            }
+        }
+        AppButton {
+            Layout.alignment: Qt.AlignHCenter
+            visible: root.status === "Running"
+            text: "Screenshot"
+            secondary: true
+            compact: true
+            onClicked: root.takeScreenshot()
+        }
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            visible: text.length > 0
+            text: root.note
+            color: Theme.textMuted
+            font.pixelSize: 11
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: root.status === "Running"
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            color: Theme.textMuted
+            font.pixelSize: 10
+            lineHeight: 1.3
+            text: "On the screen window: drag to swipe, scroll wheel to scroll, right-click = Back, middle-click = Home, "
+                + "Ctrl + drag = pinch, Alt+S = Recents, Alt+N = notifications, Alt+R = rotate, Alt+P = power"
+        }
+        GridLayout {
+            Layout.alignment: Qt.AlignHCenter
+            visible: root.status === "Running"
+            columns: 4
+            columnSpacing: 6
+            rowSpacing: 6
+            Repeater {
+                model: [["Back", "back"], ["Home", "home"], ["Recents", "recents"], ["Notifs", "notifications"],
+                        ["Vol +", "volume_up"], ["Vol -", "volume_down"], ["Power", "power"]]
+                AppButton {
+                    required property var modelData
+                    text: modelData[0]
+                    secondary: true
+                    compact: true
+                    onClicked: root.device.press(modelData[1])
+                }
+            }
+            AppButton {
+                text: "Screenshot"
+                secondary: true
+                compact: true
+                onClicked: root.takeScreenshot()
+            }
+        }
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            visible: text.length > 0
+            text: root.note
+            color: Theme.textMuted
+            font.pixelSize: 11
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: root.status === "Running"
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            color: Theme.textMuted
+            font.pixelSize: 10
+            lineHeight: 1.3
+            text: "On the screen window: drag to swipe, scroll wheel to scroll, right-click = Back, middle-click = Home, "
+                + "Ctrl + drag = pinch, Alt+S = Recents, Alt+N = notifications, Alt+P = power, Alt+Up/Down = volume"
         }
         RowLayout {
             Layout.alignment: Qt.AlignHCenter

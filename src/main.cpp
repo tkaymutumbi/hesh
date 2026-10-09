@@ -262,13 +262,34 @@ int main(int argc, char* argv[])
                     QMetaObject::invokeMethod(root, action == "show" ? "showMainWindow" : action == "logins" ? "showLogins" : "enableBackground");
                 } else if (action == "create" && request.value("type").toString() == "android") {
                     const auto name = request.value("name").toString().trimmed();
-                    if (name.isEmpty()) reply = {{"ok", false}, {"error", "Enter a name"}};
-                    else {
-                        const auto flavor = request.value("flavor").toString("google");
-                        const auto serial = request.value("serial").toString();
-                        if (flavor == "phone" && serial.isEmpty()) reply = {{"ok", false}, {"error", "Choose a connected phone serial"}};
-                        else reply.insert("id", manager->createAndroidDevice(name, request.value("profile").toString("Pixel 7"), flavor, serial)->id());
+                    const auto serial = request.value("serial").toString().trimmed();
+                    if (name.isEmpty() || serial.isEmpty()) reply = {{"ok", false}, {"error", "Enter a name and choose a connected phone"}};
+                    else if (auto* created = manager->createAndroidDevice(name, request.value("profile").toString("Pixel 7"), serial))
+                        reply.insert("id", created->id());
+                    else reply = {{"ok", false}, {"error", "Could not add the phone"}};
+                } else if (action == "phones") {
+                    QJsonArray phones, pairing;
+                    for (const auto& entry : Hesh::AndroidDevice::connectedPhones()) {
+                        const auto parts = entry.split('|');
+                        phones.append(QJsonObject{{"serial", parts.value(0)}, {"model", parts.value(1)}});
                     }
+                    for (const auto& entry : Hesh::AndroidDevice::pairingCandidates()) {
+                        const auto parts = entry.split('|');
+                        pairing.append(QJsonObject{{"address", parts.value(0)}, {"name", parts.value(1)}});
+                    }
+                    reply.insert("phones", phones);
+                    reply.insert("pairing", pairing);
+                } else if (action == "pair" || action == "connect") {
+                    auto done = [socket](bool ok, QString message) {
+                        if (socket->state() != QLocalSocket::ConnectedState) return;
+                        QJsonObject out{{"ok", ok}, {"message", message}};
+                        if (!ok) out.insert("error", message);
+                        socket->write(QJsonDocument(out).toJson(QJsonDocument::Compact) + '\n');
+                        socket->disconnectFromServer();
+                    };
+                    if (action == "pair") Hesh::AdbPairing::pair(request.value("address").toString(), request.value("code").toString(), socket, done);
+                    else Hesh::AdbPairing::connectTo(request.value("address").toString(), socket, done);
+                    return;
                 } else if (action == "create") {
                     const auto name = request.value("name").toString().trimmed();
                     const auto url = request.value("url").toString().trimmed();

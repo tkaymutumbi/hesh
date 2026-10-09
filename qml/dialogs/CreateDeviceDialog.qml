@@ -15,7 +15,7 @@ Popup {
     // Stay inside the window on narrow workspaces instead of clipping the
     // fields and the action buttons.
     width: Math.min(560, (Overlay.overlay ? Overlay.overlay.width : 560) - 40)
-    height: Math.min(530, (Overlay.overlay ? Overlay.overlay.height : 530) - 40)
+    height: Math.min(kindCombo.currentIndex === 1 ? 700 : 560, (Overlay.overlay ? Overlay.overlay.height : 560) - 40)
     padding: 0
 
     Overlay.modal: Rectangle { color: "#99080a0e" }
@@ -54,7 +54,26 @@ Popup {
         return 0
     }
 
-    onOpened: { reset(); kindCombo.currentIndex = 0; phoneCombo.phones = root.manager ? root.manager.connectedPhones() : [] }
+    property string phoneMessage: ""
+    property bool phoneOk: false
+
+    function scanPhones() {
+        if (!root.manager) return
+        phoneCombo.phones = root.manager.connectedPhones()
+        const offered = root.manager.pairingCandidates()
+        if (offered.length > 0 && pairAddress.text.length === 0) pairAddress.text = offered[0].split("|")[0]
+    }
+
+    Connections {
+        target: root.manager
+        function onPhoneActionFinished(ok, message) {
+            root.phoneOk = ok
+            root.phoneMessage = ok ? "Paired. Open Wireless debugging and connect, then Refresh." : message
+            root.scanPhones()
+        }
+    }
+
+    onOpened: { reset(); kindCombo.currentIndex = 0; root.phoneMessage = ""; pairAddress.text = ""; pairCode.text = ""; root.scanPhones() }
     onClosed: reset()
 
     ColumnLayout {
@@ -96,18 +115,85 @@ Popup {
                 id: kindCombo
                 Layout.fillWidth: true
                 implicitHeight: 38
-                model: ["Web page", "My phone (connected over adb)", "Android emulator, light", "Android emulator, with Google apps"]
+                model: ["Web page", "My phone (over adb)"]
                 font.pixelSize: 12
             }
 
-            ComboBox {
-                id: phoneCombo
+            ColumnLayout {
+                id: phoneSection
                 Layout.fillWidth: true
-                implicitHeight: 38
                 visible: kindCombo.currentIndex === 1
-                property var phones: []
-                model: phones.length > 0 ? phones.map(function(p) { return p.split("|")[1] + "  (" + p.split("|")[0] + ")" }) : ["No phone found: connect it and allow debugging"]
-                font.pixelSize: 12
+                spacing: 8
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    ComboBox {
+                        id: phoneCombo
+                        Layout.fillWidth: true
+                        implicitHeight: 38
+                        property var phones: []
+                        model: phones.length > 0 ? phones.map(function(p) { return p.split("|")[1] + "  (" + p.split("|")[0] + ")" })
+                                                 : ["No phone connected yet"]
+                        font.pixelSize: 12
+                    }
+                    AppButton {
+                        text: "Refresh"
+                        secondary: true
+                        compact: true
+                        onClicked: root.scanPhones()
+                    }
+                }
+
+                Text {
+                    text: "Pair over Wi-Fi: on the phone open Developer options, Wireless debugging, Pair device with pairing code."
+                    color: Theme.textMuted
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    TextField {
+                        id: pairAddress
+                        Layout.fillWidth: true
+                        implicitHeight: 34
+                        placeholderText: "Pairing address  192.168.1.20:37099"
+                        color: Theme.text
+                        font.pixelSize: 12
+                        selectByMouse: true
+                        background: Rectangle { radius: Theme.radiusSmall; color: Theme.input; border.width: 1; border.color: parent.activeFocus ? Theme.accentStrong : Theme.border }
+                    }
+                    TextField {
+                        id: pairCode
+                        Layout.preferredWidth: 96
+                        implicitHeight: 34
+                        placeholderText: "Code"
+                        inputMethodHints: Qt.ImhDigitsOnly
+                        maximumLength: 6
+                        color: Theme.text
+                        font.pixelSize: 12
+                        selectByMouse: true
+                        background: Rectangle { radius: Theme.radiusSmall; color: Theme.input; border.width: 1; border.color: parent.activeFocus ? Theme.accentStrong : Theme.border }
+                    }
+                    AppButton {
+                        text: "Pair"
+                        compact: true
+                        enabled: pairAddress.text.length > 0 && pairCode.text.length === 6
+                        onClicked: { root.phoneMessage = "Pairing…"; root.manager.pairPhone(pairAddress.text, pairCode.text) }
+                    }
+                }
+
+                Text {
+                    visible: root.phoneMessage.length > 0
+                    text: root.phoneMessage
+                    color: root.phoneOk ? Theme.accent : Theme.warning
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
             }
 
             Text {
@@ -262,13 +348,11 @@ Popup {
                 text: "Create Device"
                 compact: true
                 onClicked: {
-                    if (root.manager && kindCombo.currentIndex > 0) {
-                        const phone = kindCombo.currentIndex === 1
-                        if (phone && phoneCombo.phones.length === 0) return
+                    if (root.manager && kindCombo.currentIndex === 1) {
+                        if (phoneCombo.phones.length === 0) return
                         root.deviceCreated(root.manager.createAndroidDevice(
                             nameField.text, profileCombo.currentText,
-                            phone ? "phone" : kindCombo.currentIndex === 2 ? "light" : "google",
-                            phone ? phoneCombo.phones[phoneCombo.currentIndex].split("|")[0] : ""))
+                            phoneCombo.phones[phoneCombo.currentIndex].split("|")[0]))
                     } else if (root.manager) {
                         root.deviceCreated(root.manager.createWebDevice(nameField.text,
                                                                         profileCombo.currentText,

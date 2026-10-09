@@ -64,7 +64,6 @@ QJsonObject deviceRecordToJson(const DeviceRecord& record)
         {QStringLiteral("accent"), record.accent},
         {QStringLiteral("running"), record.running},
         {QStringLiteral("contentTheme"), record.contentTheme},
-        {QStringLiteral("flavor"), record.flavor},
         {QStringLiteral("serial"), record.serial},
     };
 }
@@ -92,7 +91,6 @@ std::optional<DeviceRecord> deviceRecordFromJson(const QJsonObject& object)
     // Absent means the page follows the desktop scheme; Device normalizes an
     // unknown or empty value to "system" as well.
     record.contentTheme = object.value(QStringLiteral("contentTheme")).toString();
-    record.flavor = object.value(QStringLiteral("flavor")).toString();
     record.serial = object.value(QStringLiteral("serial")).toString();
     return record;
 }
