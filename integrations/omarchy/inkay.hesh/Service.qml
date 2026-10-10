@@ -138,15 +138,20 @@ Item {
       readonly property int side: 262
       readonly property int bubble: 36
       // The box goes on the right unless that would leave the screen.
-      readonly property bool onRight: t ? (t.x + t.w + pad + side <= t.sw) : true
+      readonly property bool fitsRight: t ? (t.x + t.w + pad + side <= t.sw) : true
+      readonly property bool fitsLeft: t ? (t.x - pad - side >= 0) : true
+      readonly property bool onRight: fitsRight || !fitsLeft
+      // Neither side has room: the circle stays on the right edge and its box opens over the window.
+      readonly property bool inside: !fitsRight && !fitsLeft
+      readonly property int room: inside ? 0 : side
       property bool open: false
       screen: t ? (Quickshell.screens.filter(function(s) { return s.name === t.monitor })[0] || Quickshell.screens[0]) : Quickshell.screens[0]
       visible: root.active && t !== null
       color: "transparent"
       anchors { top: true; left: true }
-      margins.left: t ? Math.max(0, t.x - pad - (onRight ? 0 : side)) : 0
+      margins.left: t ? Math.max(0, t.x - pad - (onRight ? 0 : room)) : 0
       margins.top: t ? Math.max(t.top, t.y - pad) : 0
-      implicitWidth: t ? t.w + pad * 2 + side : 1
+      implicitWidth: t ? t.w + pad * 2 + room : 1
       implicitHeight: t ? t.h + pad * 2 : 1
       exclusionMode: ExclusionMode.Ignore
       focusable: false
@@ -162,7 +167,7 @@ Item {
       onVisibleChanged: if (!visible) open = false
 
       // Window rect inside this layer surface.
-      readonly property real wx: onRight ? pad : side + pad
+      readonly property real wx: t ? t.x - margins.left : pad
       readonly property real wy: t ? t.y - margins.top : pad
 
       Item {
@@ -275,7 +280,7 @@ Item {
         color: Color.background
         border.width: 1
         border.color: root.stateColor
-        x: win.onRight ? bubbleItem.x + bubbleItem.width + 10 : bubbleItem.x - 10 - width
+        x: win.onRight && !win.inside ? bubbleItem.x + bubbleItem.width + 10 : bubbleItem.x - 10 - width
         y: Math.min(bubbleItem.y, Math.max(0, win.height - height))
 
         Column {
