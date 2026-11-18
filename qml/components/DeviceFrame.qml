@@ -120,6 +120,32 @@ Item {
     }
 
     property var device: null
+    property bool responsiveViewport: false
+    property bool isPopup: false
+    property bool navigateOnCreate: true
+    readonly property real logicalViewportWidth: root.responsiveViewport
+        ? Math.max(1, root.availableWidth) : root.device ? root.device.viewportWidth : 412
+    readonly property real logicalViewportHeight: root.responsiveViewport
+        ? Math.max(1, root.availableHeight) : root.device ? root.device.viewportHeight : 915
+    property var popupWindows: []
+
+    function openPopup(request) {
+        var component = Qt.createComponent("BrowserPopupWindow.qml")
+        if (component.status !== Component.Ready) { console.warn(component.errorString()); return }
+        var popup = component.createObject(null, {device: root.device, manager: root.manager})
+        if (!popup || !popup.pageView) { if (popup) popup.destroy(); return }
+        popupWindows.push(popup)
+        popup.closing.connect(function() {
+            var i = root.popupWindows.indexOf(popup)
+            if (i >= 0) root.popupWindows.splice(i, 1)
+            Qt.callLater(function() { popup.destroy() })
+        })
+        request.openIn(popup.pageView)
+        popup.show()
+        popup.raise()
+        popup.requestActivate()
+    }
+
     // Optional DeviceManager, used by the stopped state to start the device
     // without leaving the frame.
     property var manager: null
@@ -175,7 +201,7 @@ Item {
     // exactly what the state overlay gets, because the screen inset and the
     // frame scale cancel out in both hosts.
     readonly property real screenVisualWidth: root.device
-                                              ? root.device.viewportWidth * root.presentationScale
+                                              ? root.logicalViewportWidth * root.presentationScale
                                               : 0
     // State content shrinks with a small preview. Without this the fixed
     // column width overflows a scaled-down screen and the clipped progress
@@ -250,7 +276,7 @@ Item {
     property real profileDpr: root.device ? root.device.devicePixelRatio : 1.0
 
     function syncDevicePixelRatio() {
-        if (!root.profileReady || !root.device || webView.url.toString() === "about:blank")
+        if (root.responsiveViewport || (root.device && root.device.profileName === "Desktop") || !root.profileReady || !root.device || webView.url.toString() === "about:blank")
             return
         var dpr = root.profileDpr
         if (dpr <= 0) return
@@ -377,15 +403,15 @@ Item {
     // zoomFactor is set to presentationScale. This keeps CSS viewport
     // (visual / zoom) at the profile's logical size while rendering at the
     // exact display size – no Item.scale bilinear filtering.
-    property real presentationScale: root.device
+    property real presentationScale: root.responsiveViewport ? 1.0 : root.device
                                        ? Math.min(root.maximumPresentationScale,
                                                   Math.max(root.minimumPresentationScale, (root.availableWidth
                                                            - root.presentationPadding
                                                            - (root.showDevTools ? root.devToolsWidth + 16 : 0))
-                                                           / (root.device.viewportWidth + root.bezel * 2)),
+                                                           / (root.logicalViewportWidth + root.bezel * 2)),
                                                   Math.max(root.minimumPresentationScale, (root.availableHeight
                                                            - root.presentationPadding)
-                                                           / (root.device.viewportHeight + root.bezel * 2)))
+                                                           / (root.logicalViewportHeight + root.bezel * 2)))
                                        : 1.0
     readonly property int presentationPercent: Math.round(root.presentationScale * 100)
     readonly property string presentationMode: root.allowUpscale ? "Scale" : "Fit"
@@ -574,11 +600,11 @@ Item {
     }
 
     width: root.device
-           ? (root.device.viewportWidth + root.bezel * 2) * root.presentationScale
+           ? (root.logicalViewportWidth + root.bezel * 2) * root.presentationScale
              + (root.showDevTools ? root.devToolsWidth + 16 : 0)
            : 0
     height: root.device
-            ? (root.device.viewportHeight + root.bezel * 2) * root.presentationScale
+            ? (root.logicalViewportHeight + root.bezel * 2) * root.presentationScale
             : 0
 
     onDeviceChanged: {
@@ -588,7 +614,7 @@ Item {
         root.pageError = ""
         if (root.profileReady && root.device) {
             var p = BrowserProfiles.profileFor(root.device)
-            if (p && root.device.userAgent) p.httpUserAgent = root.device.userAgent
+            if (p && root.device.userAgent && root.device.profileName !== "Desktop") p.httpUserAgent = root.device.userAgent
             root.syncDevicePixelRatio()
         }
     }
@@ -620,7 +646,7 @@ Item {
             }
             return false
         }
-        if (root.device && root.device.userAgent) {
+        if (root.device && root.device.userAgent && root.device.profileName !== "Desktop") {
             profile.httpUserAgent = root.device.userAgent
         }
         webView.profile = profile
@@ -658,6 +684,9 @@ Item {
     }
 
     Component.onDestruction: {
+        var children = root.popupWindows.slice()
+        root.popupWindows = []
+        for (var i = 0; i < children.length; ++i) { children[i].close(); }
         if (root.device) Automation.unregisterSurface(root.device.id, root)
         // Stop any pending load so the shared profile isn't kept busy
         // while the Loader's deferred destroy is still pending. This
@@ -671,8 +700,8 @@ Item {
 
     Rectangle {
         id: frame
-        width: root.device ? (root.device.viewportWidth + root.bezel * 2) * root.presentationScale : 0
-        height: root.device ? (root.device.viewportHeight + root.bezel * 2) * root.presentationScale : 0
+        width: root.device ? (root.logicalViewportWidth + root.bezel * 2) * root.presentationScale : 0
+        height: root.device ? (root.logicalViewportHeight + root.bezel * 2) * root.presentationScale : 0
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
         anchors.leftMargin: root.showDevTools ? 0 : (root.width - width - (root.showDevTools ? root.devToolsWidth + 16 : 0)) / 2
@@ -946,7 +975,7 @@ Item {
                 onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID) {
                     if (root.device) Automation.noteConsole(root.device.id, level, message, lineNumber, sourceID)
                 }
-                url: root.profileReady && root.device && root.device.status === "Running"
+                url: root.navigateOnCreate && root.profileReady && root.device && root.device.status === "Running"
                      ? root.device.url : "about:blank"
                 // Render directly at visual size: zoom = presentationScale
                 // keeps CSS viewport = visual / zoom = profile logical size
@@ -955,6 +984,11 @@ Item {
                 zoomFactor: Math.max(0.25, Math.min(5.0,
                                                    (root.presentationScale > 0 ? root.presentationScale : 1.0)
                                                    + root.renderWakeNudge))
+                onUrlChanged: {
+                    if (root.device && !root.isPopup && root.profileReady)
+                        root.device.rememberUrl(webView.url.toString())
+                }
+                onNewWindowRequested: function(request) { root.openPopup(request) }
                 backgroundColor: "#0d1014"
                 settings.forceDarkMode: root.forceDarkContent
                 settings.accelerated2dCanvasEnabled: true
@@ -1027,6 +1061,18 @@ Item {
                     } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                         // about:blank never fails visibly; real URL failures do
                         if (isBlank) return
+                        // HTTP challenge/error responses can contain a usable
+                        // website page. Keep that document visible so users can
+                        // complete verification instead of covering it up.
+                        if (loadRequest.errorDomain === WebEngineLoadingInfo.HttpStatusCodeDomain
+                                && !loadRequest.isErrorPage) {
+                            root.pageLoading = false
+                            root.pageLoaded = true
+                            root.pageFailed = false
+                            root.pageError = ""
+                            root.syncDevicePixelRatio()
+                            return
+                        }
                         root.pageLoading = false
                         root.pageLoaded = false
                         root.pageFailed = true
@@ -1181,7 +1227,7 @@ Item {
     Rectangle {
         id: devToolsPanel
         visible: root.showDevTools
-        x: root.device ? (root.device.viewportWidth + root.bezel * 2) * root.presentationScale + 16 : 0
+        x: root.device ? (root.logicalViewportWidth + root.bezel * 2) * root.presentationScale + 16 : 0
         y: 0
         width: root.devToolsWidth
         height: root.height

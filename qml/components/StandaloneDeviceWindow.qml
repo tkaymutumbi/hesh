@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Window
+import QtQuick.Controls
+import QtQuick.Layouts
 import QtWebEngine
 import Hesh 1.0
 
@@ -21,6 +23,17 @@ Window {
     // DevTools opens as its own top-level window so Hyprland can tile it next
     // to the device instead of resizing the device's viewport.
     property bool devToolsOpen: false
+    readonly property bool desktopBrowser: root.device && root.device.profileName === "Desktop"
+    readonly property real chromeHeight: 0
+    function navigate(address) {
+        if (!root.device) return
+        var value = String(address).trim()
+        if (!/^[a-z][a-z0-9+.-]*:/i.test(value)) value = "https://" + value
+        if (!/^https?:\/\/[^\s/]+/i.test(value)) return
+        root.device.url = value
+        if (root.manager) root.manager.startDevice(root.deviceId)
+        if (browserLoader.item) browserLoader.item.pageView.forceActiveFocus()
+    }
     // Window dimensions are device-independent pixels. Use the compositor's
     // available work area (which excludes reserved bars/panels) and never
     // enlarge the logical viewport; upscaling the WebEngine surface is what
@@ -35,7 +48,7 @@ Window {
     readonly property real initialPresentationScale: root.device
                                                      ? Math.min(1.0,
                                                                 Math.max(1, root.availableScreenWidth - 32) / root.viewportWidth,
-                                                                Math.max(1, root.availableScreenHeight - root.workAreaVerticalMargin) / root.viewportHeight)
+                                                                Math.max(1, root.availableScreenHeight - root.workAreaVerticalMargin) / (root.viewportHeight + root.chromeHeight))
                                                      : 1.0
 
     signal closedByUser(string id)
@@ -49,9 +62,9 @@ Window {
     color: Theme.window
     title: root.device ? root.device.name + " — Hesh" : "Hesh"
     width: Math.max(1, Math.round(root.viewportWidth * root.initialPresentationScale))
-    height: Math.max(1, Math.round(root.viewportHeight * root.initialPresentationScale))
-    minimumWidth: 1
-    minimumHeight: 1
+    height: Math.max(1, Math.round((root.viewportHeight + root.chromeHeight) * root.initialPresentationScale))
+    minimumWidth: root.desktopBrowser ? Math.min(480, root.availableScreenWidth - 32) : 1
+    minimumHeight: root.desktopBrowser ? Math.min(300, root.availableScreenHeight - 64) : 1
 
     onDeviceChanged: {
         if (root.device) root.deviceId = root.device.id
@@ -156,23 +169,30 @@ Window {
     // shortcuts here. Ctrl+Shift+R bypasses the profile disk cache.
     Shortcut {
         sequence: "Ctrl+R"
-        context: Qt.ApplicationShortcut
+        context: Qt.WindowShortcut
         enabled: root.visible && browserLoader.item !== null
         onActivated: browserLoader.item.reloadPage(false)
     }
 
     Shortcut {
         sequence: "Ctrl+Shift+S"
-        context: Qt.ApplicationShortcut
+        context: Qt.WindowShortcut
         enabled: root.visible && browserLoader.item !== null
         onActivated: browserLoader.item.takeScreenshot()
     }
 
     Shortcut {
         sequence: "Ctrl+Shift+R"
-        context: Qt.ApplicationShortcut
+        context: Qt.WindowShortcut
         enabled: root.visible && browserLoader.item !== null
         onActivated: browserLoader.item.reloadPage(true)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+L"
+        context: Qt.WindowShortcut
+        enabled: root.desktopBrowser
+        onActivated: root.openOptions()
     }
 
     // Main.qml calls this before restoring the embedded host. Keeping the
@@ -188,6 +208,7 @@ Window {
     }
 
     onClosing: function(closeEvent) {
+        optionsWindow.close()
         root.devToolsOpen = false
         releaseBrowserSurface()
         if (!root.suppressCloseSignal) root.closedByUser(root.deviceId)
@@ -218,9 +239,68 @@ Window {
         }
     }
 
+    function openOptions() {
+        addressField.text = browserLoader.item ? browserLoader.item.pageUrl : root.device ? root.device.url : ""
+        optionsWindow.show()
+        optionsWindow.raise()
+        optionsWindow.requestActivate()
+    }
+
+    Window {
+        id: optionsWindow
+        transientParent: null
+        visible: false
+        title: "Browser options — Hesh"
+        minimumWidth: Math.min(480, root.availableScreenWidth - 32)
+        minimumHeight: Math.min(320, root.availableScreenHeight - 64)
+        color: Theme.window
+        width: Math.min(520, root.availableScreenWidth - 32)
+        height: Math.min(340, root.availableScreenHeight - 64)
+        Shortcut { sequence: "Escape"; context: Qt.WindowShortcut; onActivated: optionsWindow.close() }
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+            Text { text: "Browser options"; color: Theme.text; font.pixelSize: 22 }
+            TextField {
+                id: addressField
+                Layout.fillWidth: true
+                color: Theme.text
+                selectByMouse: true
+                placeholderText: "Enter a URL"
+                onAccepted: { root.navigate(text); optionsWindow.close(); root.focusWindow() }
+                background: Rectangle { color: Theme.input; radius: 6; border.color: Theme.border }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                AppButton { compact: true; text: "Back"; enabled: browserLoader.item && browserLoader.item.canGoBack; onClicked: browserLoader.item.goBack() }
+                AppButton { compact: true; text: "Forward"; enabled: browserLoader.item && browserLoader.item.canGoForward; onClicked: browserLoader.item.goForward() }
+                AppButton { compact: true; text: "Reload"; onClicked: root.reloadPage() }
+                AppButton { compact: true; text: "Go"; onClicked: { root.navigate(addressField.text); optionsWindow.close(); root.focusWindow() } }
+            }
+            RowLayout {
+                AppButton { text: "Applications"; onClicked: Automation.openApplications(root.deviceId) }
+                AppButton { text: "Saved logins"; onClicked: Automation.openLogins(root.deviceId) }
+            }
+            RowLayout {
+                AppButton { text: "Minimize"; onClicked: { optionsWindow.close(); root.showMinimized() } }
+                AppButton { text: "Maximize / restore"; onClicked: root.visibility === Window.Maximized ? root.showNormal() : root.showMaximized() }
+            }
+            Item { Layout.fillHeight: true }
+            RowLayout {
+                AppButton { text: "Close device window"; onClicked: root.close() }
+                AppButton { text: "Done"; onClicked: { optionsWindow.close(); root.focusWindow() } }
+            }
+        }
+    }
+
     Rectangle {
         id: surface
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.topMargin: root.chromeHeight
+        anchors.bottom: parent.bottom
         color: Theme.window
 
         Loader {
@@ -230,8 +310,9 @@ Window {
             sourceComponent: DeviceFrame {
                 device: root.device
                 manager: root.manager
-                availableWidth: root.width
-                availableHeight: root.height
+                availableWidth: surface.width
+                availableHeight: surface.height
+                responsiveViewport: root.desktopBrowser
                 bezel: 0
                 screenRadius: 0
                 showChrome: false
@@ -262,6 +343,7 @@ Window {
             canGoBack: browserLoader.item ? browserLoader.item.canGoBack : false
             canGoForward: browserLoader.item ? browserLoader.item.canGoForward : false
             devToolsOpen: root.devToolsOpen
+            onOptionsRequested: root.openOptions()
             onDevToolsRequested: root.devToolsOpen = !root.devToolsOpen
             onReloadRequested: if (browserLoader.item) browserLoader.item.reloadPage(false)
             onScreenshotRequested: if (browserLoader.item) browserLoader.item.takeScreenshot()
@@ -271,6 +353,14 @@ Window {
             onMainWindowRequested: root.mainWindowRequested(root.deviceId)
             onCloseRequested: root.close()
         }
+    }
+
+    LoginHandoff {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        deviceId: root.deviceId
+        z: 30
     }
 
     Window {

@@ -14,6 +14,7 @@ Popup {
     property bool canGoForward: false
     property bool devToolsOpen: false
 
+    signal optionsRequested()
     signal reloadRequested()
     signal screenshotRequested()
     signal devToolsRequested()
@@ -58,6 +59,24 @@ Popup {
             id: menuContents
             width: menuScroll.availableWidth
         spacing: 2
+
+        AppButton {
+            Layout.fillWidth: true
+            text: "Browser options…"
+            secondary: true
+            compact: true
+            visible: root.device && root.device.profileName === "Desktop"
+            onClicked: { root.close(); Qt.callLater(function() { root.optionsRequested() }) }
+        }
+
+        AppButton {
+            Layout.fillWidth: true
+            text: "Applications"
+            secondary: true
+            compact: true
+            visible: root.device && root.device.type === "web"
+            onClicked: { root.close(); Automation.openApplications(root.device.id) }
+        }
 
         ColumnLayout {
             Layout.fillWidth: true

@@ -39,19 +39,41 @@ function(command) {
                     label: (e.getAttribute('aria-label') || (e.labels && [...e.labels].map(l => l.innerText).join(' ')) || e.innerText || e.getAttribute('placeholder') || e.getAttribute('name') || '').slice(0, 180),
                     disabled: !!e.disabled})), truncated: all.length > limit};
         };
-        if (command.action === 'inspect') return JSON.stringify({ok: true, page: snapshot()});
+        let humanMessage = '';
+        if (command.agent) {
+            if (location.hostname === 'accounts.google.com')
+                humanMessage = 'Complete Google sign-in yourself, then click Resume AI.';
+            else if ([...document.querySelectorAll('input[autocomplete=one-time-code],input[name=captcha],iframe[title*=challenge i]')].some(visible))
+                humanMessage = 'Complete the verification challenge yourself, then click Resume AI.';
+        }
+        if (command.action === 'inspect') return JSON.stringify({ok: true, page: snapshot(),
+            ...(humanMessage ? {humanRequired: true, message: humanMessage} : {})});
+        if (humanMessage) return JSON.stringify({ok: false, error: humanMessage, humanRequired: true});
         if (command.action === 'credential_fill') {
             if (location.origin !== command.origin) throw Error('Page origin changed; login was not filled');
-            const username = find(command.emailSelector || 'input[type=email],input[autocomplete=username]');
-            const password = find(command.passwordSelector || 'input[type=password]');
-            if (username === password || username.type === 'password') throw Error('Email and password targets must be different fields');
-            if (username.form !== password.form) throw Error('Login fields must belong to the same form');
-            // Reject forms posting to a different origin, even on a matching page.
-            if (password.form && new URL(password.form.action || location.href, location.href).origin !== location.origin) throw Error('Login form posts to a different origin');
-            if (password.type !== 'password') throw Error('Password target must be a password field');
-            fill(username, command.email);
-            fill(password, command.password);
-            return JSON.stringify({ok: true, filled: true, submitted: false});
+            const mode = command.fields || 'auto';
+            if (!['auto', 'username', 'password'].includes(mode)) throw Error('fields must be auto, username or password');
+            const optional = (explicit, fallback) => {
+                if (explicit) return find(explicit);
+                const matches = [...document.querySelectorAll(fallback)].filter(visible);
+                if (matches.length > 1) throw Error('Multiple login fields found; provide an explicit selector');
+                return matches[0] || null;
+            };
+            const username = mode === 'password' ? null : optional(command.emailSelector, 'input[type=email],input[autocomplete=username],input[autocomplete=email],input[name=username],input[name=email],input[id=username],input[id=email]');
+            const password = mode === 'username' ? null : optional(command.passwordSelector, 'input[type=password]');
+            if (!username && !password) throw Error('No visible login fields found');
+            if (mode === 'username' && !username) throw Error('No visible username field found');
+            if (mode === 'password' && !password) throw Error('No visible password field found');
+            if (username && (username === password || username.type === 'password')) throw Error('Username and password targets must be different fields');
+            if (username && password && username.form !== password.form) throw Error('Login fields must belong to the same form');
+            for (const field of [username, password].filter(Boolean)) {
+                if (field.form && new URL(field.form.action || location.href, location.href).origin !== location.origin) throw Error('Login form posts to a different origin');
+                if (field.disabled || field.readOnly || field.type === 'file') throw Error('Field cannot be filled');
+            }
+            if (password && password.type !== 'password') throw Error('Password target must be a password field');
+            if (username) fill(username, command.email);
+            if (password) fill(password, command.password);
+            return JSON.stringify({ok: true, filled: true, fields: [username ? 'username' : null, password ? 'password' : null].filter(Boolean), submitted: false});
         }
         if (command.action !== 'interact' || !Array.isArray(command.steps) || command.steps.length < 1 || command.steps.length > 30) throw Error('Provide 1–30 interaction steps');
         const results = [];

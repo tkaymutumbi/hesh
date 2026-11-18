@@ -132,7 +132,7 @@ Item {
                 Column {
                     anchors.centerIn: parent
                     spacing: 12
-                    visible: root.device !== null && root.standalone
+                    visible: root.device !== null && (root.standalone || DesktopBrowsers.usesNative(root.device))
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -152,7 +152,7 @@ Item {
 
                     AppButton {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "Focus Window"
+                        text: root.standalone ? "Focus Window" : "Open Desktop Browser"
                         compact: true
                         onClicked: root.openStandaloneRequested(root.device)
                     }
@@ -162,8 +162,8 @@ Item {
             Loader {
                 id: deviceLoader
                 anchors.centerIn: parent
-                active: root.device !== null && !root.standalone && root.frameEnabled
-                sourceComponent: root.device && root.device.type === "ANDROID" ? androidPanelComponent : deviceFrameComponent
+                active: root.device !== null && !root.standalone && root.frameEnabled && !DesktopBrowsers.usesNative(root.device)
+                sourceComponent: root.device && root.device.type === "android" ? androidPanelComponent : deviceFrameComponent
 
                 Component {
                     id: androidPanelComponent
@@ -299,4 +299,12 @@ Item {
             }
         }
     }
+    LoginHandoff {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        deviceId: root.device ? root.device.id : ""
+        z: 30
+    }
+
 }

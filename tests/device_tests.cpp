@@ -20,6 +20,8 @@ class DeviceTests final : public QObject
 
 private slots:
     void createWebDevice();
+    void startingRunningDevicePreservesPage();
+    void navigationPersistsWithoutReload();
     void removeDevice();
     void clearDeviceData();
     void clearAllDeviceData();
@@ -57,6 +59,43 @@ void DeviceTests::createWebDevice()
     QCOMPARE(device->typeName(), QStringLiteral("web"));
     QCOMPARE(device->statusName(), QStringLiteral("Running"));
     QCOMPARE(manager.selectedDevice(), static_cast<Device*>(device));
+}
+
+void DeviceTests::startingRunningDevicePreservesPage()
+{
+    QTemporaryDir directory;
+    Settings settings("HeshTests", "IdempotentStart", directory.filePath("settings.ini"));
+    DeviceManager manager(&settings);
+    auto* device = manager.createWebDevice("Browser", "Desktop", "https://example.com");
+    QSignalSpy status(device, &Device::statusChanged);
+    manager.startDevice(device->id());
+    QCOMPARE(status.count(), 0);
+    QCOMPARE(device->statusName(), "Running");
+}
+
+void DeviceTests::navigationPersistsWithoutReload()
+{
+    QTemporaryDir directory;
+    Settings settings("HeshTests", "Navigation", directory.filePath("settings.ini"));
+    QString id;
+    {
+        DeviceManager manager(&settings);
+        auto* device = manager.createWebDevice("Browser", "Desktop", "https://example.com");
+        id = device->id();
+        QSignalSpy requested(device, &WebDevice::urlChanged);
+        device->rememberUrl("https://example.com/dashboard");
+        QCOMPARE(requested.count(), 0);
+        QCOMPARE(device->url(), "https://example.com/dashboard");
+        device->rememberUrl("about:blank");
+        device->rememberUrl("https://user:password@example.com/");
+        QCOMPARE(device->url(), "https://example.com/dashboard");
+        device->setUrl("https://example.com/other");
+        QCOMPARE(requested.count(), 1);
+    }
+    DeviceManager restored(&settings);
+    auto* device = qobject_cast<WebDevice*>(restored.deviceById(id));
+    QVERIFY(device);
+    QCOMPARE(device->url(), "https://example.com/other");
 }
 
 void DeviceTests::removeDevice()

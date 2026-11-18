@@ -19,6 +19,7 @@ public:
               QObject* parent = nullptr);
 
     QString url() const;
+    Q_INVOKABLE void rememberUrl(const QString& url);
     void setUrl(const QString& url);
 
     // Browser storage directories that belong to this device, derived from the

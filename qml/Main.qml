@@ -34,6 +34,7 @@ ApplicationWindow {
     }
     // Logins open in their own window, so a standalone device never pulls the
     // main window onto the screen.
+    function showApplications(id) { applicationsWindow.openFor(id || (deviceManager.selectedDevice ? deviceManager.selectedDevice.id : "")) }
     function showLogins(id) { loginsWindow.openFor(id || (deviceManager.selectedDevice ? deviceManager.selectedDevice.id : "")) }
     // quiet: opened for an AI agent. The window appears without taking focus, so
     // the user's pointer and keyboard stay where they are.
@@ -46,6 +47,8 @@ ApplicationWindow {
         deviceManager.removeDevice(id)
     }
     function reloadDevice(id) {
+        var d = deviceManager.deviceById(id)
+        if (DesktopBrowsers.usesNative(d)) { DesktopBrowsers.reload(id); return }
         var host = standaloneWindows[id]
         if (host) host.reloadPage()
         else if (deviceManager.selectedDevice && deviceManager.selectedDevice.id === id) workspace.reloadPage()
@@ -150,6 +153,7 @@ ApplicationWindow {
     }
 
     function closeStandaloneForDevice(deviceId) {
+        DesktopBrowsers.close(deviceId)
         var host = window.standaloneWindows[deviceId]
         if (!host) {
             setPending(deviceId, false)
@@ -173,8 +177,12 @@ ApplicationWindow {
     function openStandaloneForDevice(device, quiet) {
         if (!device || !device.id) return
         // Android devices are shown by scrcpy, not by a web window.
-        if (device.type === "ANDROID") { device.showScreen(); return }
+        if (device.type === "android") { device.showScreen(); return }
         var deviceId = device.id
+        if (DesktopBrowsers.usesNative(device)) {
+            DesktopBrowsers.open(device, !quiet)
+            return
+        }
         var existing = window.standaloneWindows[deviceId]
         if (existing) {
             if (!quiet) existing.focusWindow()
@@ -339,6 +347,14 @@ ApplicationWindow {
                     }
 
                     AppButton {
+                        text: "Applications"
+                        compact: true
+                        secondary: true
+                        visible: !window.compactWindow
+                        onClicked: window.showApplications("")
+                    }
+
+                    AppButton {
                         text: "Logins"
                         compact: true
                         secondary: true
@@ -445,11 +461,35 @@ ApplicationWindow {
 
     Connections {
         target: Automation
+        function onApplicationsRequested(id) { window.showApplications(id) }
+        function onLoginRequired(id) {
+            var d = deviceManager.deviceById(id)
+            if (DesktopBrowsers.usesNative(d)) { DesktopBrowsers.focusForLogin(id); return }
+            var host = window.standaloneWindows[id]
+            if (host) host.focusWindow()
+            else window.showMainWindow()
+        }
         function onLoginsRequested(id) {
             window.showLogins(id)
         }
     }
 
+    ApplicationsWindow {
+        id: applicationsWindow
+        manager: deviceManager
+        onLaunchRequested: function(id, url) {
+            var device = deviceManager.deviceById(id)
+            if (!device || device.type !== "web") return
+            device.url = url
+            deviceManager.startDevice(id)
+            window.previewDevice(id, false)
+        }
+    }
+    Connections {
+        target: DesktopBrowsers
+        function onOpened(id) { window.setDetached(id, true) }
+        function onClosed(id) { window.setDetached(id, false) }
+    }
     LoginsWindow { id: loginsWindow; manager: deviceManager }
     PhoneMenu { id: phoneMenu }
 

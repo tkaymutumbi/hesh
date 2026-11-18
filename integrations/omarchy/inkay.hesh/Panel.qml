@@ -443,7 +443,8 @@ Panel {
                         delegate: Rectangle {
                             id: card
                             required property var modelData
-                            readonly property bool running: modelData.status !== "Stopped"
+                            readonly property bool running: modelData.status === "Running"
+                            readonly property bool android: modelData.type === "android"
                             width: deviceList.width
                             implicitHeight: details.implicitHeight + 24
                             radius: root.corner
@@ -460,6 +461,14 @@ Panel {
                                     Rectangle { width: 8; height: 8; radius: 4; color: card.running ? root.accent : root.dim }
                                     Text { text: card.modelData.name; color: root.foreground; font.family: root.fontFamily; font.pixelSize: 13; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
                                     Rectangle {
+                                        implicitWidth: deviceKind.implicitWidth + 14
+                                        implicitHeight: 20
+                                        radius: root.corner > 0 ? 10 : 0
+                                        color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.12)
+                                        Text { id: deviceKind; anchors.centerIn: parent; text: card.android ? "ANDROID" : "WEB"; color: root.accent; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
+                                    }
+                                    Rectangle {
+                                        visible: !card.android
                                         implicitWidth: prof.implicitWidth + 14
                                         implicitHeight: 20
                                         radius: root.corner > 0 ? 10 : 0
@@ -490,10 +499,10 @@ Panel {
                                         enabled: !root.busy
                                         onClicked: root.run(card.running ? "stop" : "start", card.modelData.id)
                                     }
-                                    Btn { text: "Preview ↗"; enabled: !root.busy && card.running; onClicked: root.run("preview", card.modelData.id) }
-                                    Btn { reload: true; tip: "Reload preview"; enabled: !root.busy && card.running; onClicked: root.run("reload", card.modelData.id) }
+                                    Btn { text: card.android ? "Show phone ↗" : "Preview ↗"; enabled: !root.busy && card.running; onClicked: root.run("preview", card.modelData.id) }
+                                    Btn { visible: !card.android; reload: true; tip: "Reload preview"; enabled: !root.busy && card.running; onClicked: root.run("reload", card.modelData.id) }
                                     Item { Layout.fillWidth: true }
-                                    Btn { text: "URL"; tip: "Change URL"; onClicked: { root.renamingId = ""; root.editingId = root.editingId === card.modelData.id ? "" : card.modelData.id } }
+                                    Btn { visible: !card.android; text: "URL"; tip: "Change URL"; onClicked: { root.renamingId = ""; root.editingId = root.editingId === card.modelData.id ? "" : card.modelData.id } }
                                 }
                                 RowLayout {
                                     visible: root.renamingId === card.modelData.id
@@ -505,7 +514,7 @@ Panel {
                                         onClicked: { root.run("rename", card.modelData.id, {name: deviceRename.text}); root.renamingId = "" } }
                                 }
                                 RowLayout {
-                                    visible: root.editingId === card.modelData.id
+                                    visible: !card.android && root.editingId === card.modelData.id
                                     Layout.fillWidth: true
                                     spacing: 6
                                     Field { id: deviceUrl; Layout.fillWidth: true; text: card.modelData.url; onAccepted: root.run("url", card.modelData.id, {url: text}) }
@@ -654,7 +663,7 @@ Panel {
                                 enabled: !root.busy && root.phones.length > 0
                                 onClicked: {
                                     var chosen = root.phones[phoneSelect.currentIndex]
-                                    root.run("create", "", {type: "android", name: deviceName.text.trim() || chosen.model, profile: "Pixel 7", serial: chosen.serial})
+                                    root.run("create", "", {type: "android", name: deviceName.text.trim() || chosen.model, profile: chosen.model, serial: chosen.serial})
                                     deviceName.text = ""; root.creating = false
                                 }
                             }

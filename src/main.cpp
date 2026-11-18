@@ -54,6 +54,7 @@ static int sendControl(const QJsonObject& request)
 #include "app/SurfaceProbe.hpp"
 #include "devices/Device.hpp"
 #include "web/BrowserProfiles.hpp"
+#include "web/DesktopBrowsers.hpp"
 #include "web/WebDevice.hpp"
 
 int main(int argc, char* argv[])
@@ -112,6 +113,9 @@ int main(int argc, char* argv[])
     QtWebEngineQuick::initialize();
 
     QGuiApplication app(argc, argv);
+    // Main.qml owns explicit quit/background behavior. Native browser windows
+    // live in another process, so closing Logins must not end the backend.
+    app.setQuitOnLastWindowClosed(false);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Hesh"));
     QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Hesh/assets/icons/hesh.png")));
 
@@ -144,7 +148,11 @@ int main(int argc, char* argv[])
     Hesh::SurfaceProbe surfaceProbe;
     qmlRegisterSingletonInstance("Hesh", 1, 0, "SurfaceProbe", &surfaceProbe);
 
+    Hesh::DesktopBrowsers desktopBrowsers;
+    qmlRegisterSingletonInstance("Hesh", 1, 0, "DesktopBrowsers", &desktopBrowsers);
+
     Hesh::Automation automation;
+    automation.setDesktopBrowsers(&desktopBrowsers, [&desktopBrowsers, &hesh](const QString& id) { return desktopBrowsers.usesNative(hesh.deviceManager()->deviceById(id)); });
     qmlRegisterSingletonInstance("Hesh", 1, 0, "Automation", &automation);
     automation.setNameResolver([&hesh](const QString& id) {
         auto* model = static_cast<Hesh::DeviceListModel*>(hesh.deviceManager()->devices());
@@ -228,7 +236,8 @@ int main(int argc, char* argv[])
                 const bool agent = request.value("agent").toBool();
                 const bool automationAction = action == "inspect" || action == "interact"
                     || action == "console" || action == "screenshot" || action == "eval"
-                    || action.startsWith("memory_") || action.startsWith("credential_");
+                    || action.startsWith("memory_") || action.startsWith("credential_")
+                    || (action.startsWith("site_") && action != "site_open");
                 if (action.startsWith("agent_")) {
                     reply = automation.session(action.mid(6), request, agent);
                     socket->write(QJsonDocument(reply).toJson(QJsonDocument::Compact) + '\n');
@@ -252,7 +261,9 @@ int main(int argc, char* argv[])
                     return;
                 }
                 if (agent) automation.noteActivity(id, request.value("client").toString("AI"), action);
-                if (action == "list") {
+                if (action == "quit") {
+                    QTimer::singleShot(100, &app, &QCoreApplication::quit);
+                } else if (action == "list") {
                     QJsonArray devices;
                     for (int row = 0; row < model->rowCount(); ++row) {
                         auto* d = model->at(row);
@@ -263,14 +274,27 @@ int main(int argc, char* argv[])
                     }
                     reply.insert("devices", devices);
                     reply.insert("profiles", QJsonArray::fromVariantList(manager->availableProfiles()));
-                } else if (action == "show" || action == "background" || action == "logins") {
-                    if (action == "logins") QMetaObject::invokeMethod(root, "showLogins", Q_ARG(QVariant, id));
+                } else if (action == "show" || action == "background" || action == "logins" || action == "applications") {
+                    if (action == "applications") QMetaObject::invokeMethod(root, "showApplications", Q_ARG(QVariant, id));
+                    else if (action == "logins") QMetaObject::invokeMethod(root, "showLogins", Q_ARG(QVariant, id));
                     else QMetaObject::invokeMethod(root, action == "show" ? "showMainWindow" : "enableBackground");
                 } else if (action == "create" && request.value("type").toString() == "android") {
                     const auto name = request.value("name").toString().trimmed();
                     const auto serial = request.value("serial").toString().trimmed();
+                    auto profile = request.value("profile").toString().trimmed();
+                    if (profile.isEmpty()) {
+                        for (const auto& entry : Hesh::AndroidDevice::connectedPhones()) {
+                            const auto parts = entry.split('|');
+                            if (parts.value(0) != serial) continue;
+                            const auto model = parts.value(1);
+                            for (const auto& candidate : Hesh::DeviceProfile::catalog())
+                                if (candidate.name == model) profile = model;
+                            break;
+                        }
+                    }
+                    if (profile.isEmpty()) profile = QStringLiteral("Pixel 7");
                     if (name.isEmpty() || serial.isEmpty()) reply = {{"ok", false}, {"error", "Enter a name and choose a connected phone"}};
-                    else if (auto* created = manager->createAndroidDevice(name, request.value("profile").toString("Pixel 7"), serial))
+                    else if (auto* created = manager->createAndroidDevice(name, profile, serial))
                         reply.insert("id", created->id());
                     else reply = {{"ok", false}, {"error", "Could not add the phone"}};
                 } else if (action == "phones") {
@@ -348,6 +372,15 @@ int main(int argc, char* argv[])
                 } else if (action == "context") {
                     reply.insert("context", automation.deviceContext(device, automation.presentation(id)));
                     reply.insert("prompt", automation.agentPrompt(device, automation.presentation(id)));
+                } else if (action == "site_open") {
+                    auto* web = qobject_cast<Hesh::WebDevice*>(device);
+                    const auto entry = automation.site(request.value("siteId").toString());
+                    if (!web || entry.isEmpty()) reply = {{"ok", false}, {"error", "Choose a web device and a saved application"}};
+                    else {
+                        web->setUrl(entry.value("url").toString());
+                        manager->startDevice(id);
+                        QMetaObject::invokeMethod(root, "previewDevice", Q_ARG(QVariant, id), Q_ARG(QVariant, agent));
+                    }
                 } else if (action == "start") {
                     manager->startDevice(id);
                 } else if (action == "stop") {
@@ -361,6 +394,10 @@ int main(int argc, char* argv[])
                     const auto name = request.value("name").toString().trimmed();
                     if (name.isEmpty()) reply = {{"ok", false}, {"error", "Enter a device name"}};
                     else device->setName(name);
+                } else if (action == "profile") {
+                    const auto profile = request.value("profile").toString().trimmed();
+                    if (!manager->setDeviceProfile(id, profile))
+                        reply = {{"ok", false}, {"error", "Choose a known device profile"}};
                 } else if (action == "clear") {
                     manager->clearDeviceData(id);
                 } else if (action == "delete") {

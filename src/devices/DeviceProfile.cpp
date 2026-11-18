@@ -33,6 +33,8 @@ QList<DeviceProfile> DeviceProfile::catalog()
          QStringLiteral("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Version/16.0 Mobile/15E148 Safari/604.1")},
         {QStringLiteral("Galaxy S24"), 360, 780, 3.0,
          QStringLiteral("Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36")},
+        {QStringLiteral("TECNO KL4"), 360, 800, 2.0,
+         QStringLiteral("Mozilla/5.0 (Linux; Android 14; TECNO KL4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.8103.50 Mobile Safari/537.36")},
         {QStringLiteral("iPad"), 820, 1180, 2.0,
          QStringLiteral("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1")},
         {QStringLiteral("Desktop"), 1440, 900, 1.0,

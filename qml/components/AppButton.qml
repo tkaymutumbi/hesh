@@ -26,7 +26,7 @@ Rectangle {
         id: label
         anchors.centerIn: parent
         text: root.text
-        color: root.secondary ? Theme.text : Theme.window
+        color: !root.enabled ? Theme.textMuted : root.secondary ? Theme.text : Theme.window
         font.pixelSize: 13
         font.weight: Font.Medium
     }

@@ -27,11 +27,13 @@ The server supports the MCP initialization protocol versions 2024-11-05,
 
 | Tool | What it does |
 | --- | --- |
-| `hesh_devices` | List devices and profiles; read device context/presentation; create, preview, navigate, rename, reload, start or stop devices; show the main app; `screenshot` a web device; `clear` or `delete` a device (both need `confirm: true`) |
+| `hesh_devices` | List devices and profiles; read device context/presentation; create, preview, navigate, rename, reload, start or stop devices; show the main app or Applications launcher; `screenshot` a web device; `clear` or `delete` a device (both need `confirm: true`) |
 | `hesh_inspect` | Read current URL, title, visible page text and controls with unique CSS selectors; open a preview and wait for readiness when needed |
 | `hesh_interact` | Batch up to 30 clicks, fills, focus, scroll or file-upload actions and return a fresh snapshot |
 | `hesh_console` | Read a web device's page console (log, warn, error and uncaught errors). Buffered per device (500 messages) from page load, with or without an agent session, so it can be read in the background after the fact. Filter by `level`, regex `pattern`, `since`, `limit`; `clear` empties it |
 | `hesh_eval` | Evaluate a JavaScript expression in a web device's page and return its JSON value (promises are awaited, up to 10 s). `world: "page"` (default) sees the page's globals; `"isolated"` sees only the DOM and storage |
+| `hesh_apps` | List, save, edit, delete, or open persistent website shortcuts in a device |
+| `hesh_session` | Start/done/pause/resume/status; `login` requests human sign-in and waits for the user to resume |
 | `hesh_memory` | Put, get, list or delete JSON notes shared across clients and restarts |
 | `hesh_logins` | List usable saved accounts, fill one on its matching HTTPS site without returning its password, or save a new test account |
 
@@ -107,8 +109,11 @@ Logins open in their own window (from the titlebar button or a device's menu), s
 
 Open **Logins** in Hesh's titlebar. Enter an HTTPS site, email/username and
 password, then choose **Save**. Select a saved account to fill or delete it.
-Filling operates on the selected device's current live browser surface: open its
-preview first. Optional CSS selectors support forms without conventional email
+Saved accounts are shared across mobile and desktop web devices. Filling operates
+on the selected device's current live browser page or sign-in popup; the MCP tool
+opens its preview when needed. Multi-step forms can fill the visible username or
+password alone (`fields: "auto"`, `"username"`, or `"password"`). Keep the password
+empty when saving an existing account to change Only me without replacing its secret. Optional CSS selectors support forms without conventional email
 or password fields. Agents can use the same saved account via `hesh_logins`.
 
 Passwords are stored through `secret-tool` in the desktop's Secret Service
@@ -120,8 +125,10 @@ page's form and are therefore accessible to that website, as with manual typing.
 Hesh does not return them to MCP or submit the form automatically.
 
 Filling requires an exact HTTPS origin match (scheme, hostname and port). A form
-that declares a different submission origin is rejected. HTTP sites and
-cross-origin iframe forms are unsupported. An unlocked desktop keyring and the
+that declares a different submission origin is rejected. HTTP is accepted only for localhost/loopback development sites. Cross-origin
+iframe login forms are unsupported. Use the actual identity-provider origin after
+a redirect, rather than the application origin. Google sign-in and verification
+challenges are manual: agents pause until you click Resume AI. An unlocked desktop keyring and the
 local control socket trust programs running as your Linux user; this feature
 is not a security boundary against other programs in the same login session.
 
@@ -164,3 +171,34 @@ and an isolated fake keyring helper. It verifies MCP initialization, schemas,
 inspection, batches, credential fill, wrong-origin rejection, password omission,
 private file permissions and restart persistence. Its test-only certificate
 bypass is never enabled by the MCP server or production app.
+
+## Native desktop browser
+
+Desktop devices use Hesh's custom Qt WebEngine window by default, with the same
+MCP controls and persistent per-device profiles as mobile web devices. The external
+Chromium/Chrome backend is optional via `HESH_DESKTOP_BROWSER=chromium`.
+When explicitly enabled, it uses an isolated, persistent profile.
+The desktop bridge uses a private DevTools pipe rather than a remote debugging port.
+Existing inspection, interactions, screenshots, evaluation, console and saved-login
+tools use this backend when explicitly enabled. `context` includes `browser: "chromium"`, the
+actual viewport, and `popup: true` when targeting an opener-backed popup. Native control follows the
+focused tab/window, falling back to the newest page when none is focused. Applications
+can be opened with `hesh_apps({"action":"open","id":"DEVICE","siteId":"APP"})`.
+
+Google authentication pages and recognized CAPTCHA/OTP challenges trigger a user
+handoff before agent interactions. `hesh_session({"action":"login","id":"DEVICE",
+"message":"Complete sign-in, then click Resume AI."})` requests the same handoff
+for other authentication flows. `status` remains available while agent actions
+are paused. User authentication pauses cannot be cleared by agent pause/start/resume.
+Normal browser operation cannot guarantee exemption from a site's bot checks.
+
+Run the end-to-end tests against both browser backends:
+
+```bash
+python3 tests/mcp_smoke.py build/hesh
+python3 tests/mcp_smoke.py build/hesh --native
+```
+
+Both use isolated storage, a localhost fixture, and a fake keyring boundary.
+Native tests run Chromium headlessly; production desktop windows use its normal
+visible browser UI and unmodified user agent.

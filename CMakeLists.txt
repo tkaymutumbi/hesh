@@ -59,6 +59,8 @@ qt_add_executable(hesh
     src/app/SurfaceProbe.cpp
     src/app/SurfaceProbe.hpp
     src/automation/Automation.hpp
+    src/web/DesktopBrowsers.cpp
+    src/web/DesktopBrowsers.hpp
     src/web/BrowserProfiles.cpp
     src/web/BrowserProfiles.hpp
 )
@@ -87,6 +89,9 @@ qt_add_qml_module(hesh
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/components/LoginHandoff.qml
+        qml/components/BrowserPopupWindow.qml
+        qml/dialogs/ApplicationsWindow.qml
         qml/components/AgentMenuActions.qml
         qml/components/AndroidPanel.qml
         qml/components/PhoneMenu.qml
@@ -134,5 +139,5 @@ install(TARGETS hesh
     RUNTIME DESTINATION bin
 )
 
-qt_add_resources(hesh automation_scripts PREFIX "/automation" BASE src/automation FILES src/automation/page.js)
+qt_add_resources(hesh automation_scripts PREFIX "/automation" BASE src/automation FILES src/automation/page.js src/automation/desktop_browser.py)
 install(PROGRAMS integrations/mcp/hesh_mcp.py DESTINATION bin RENAME hesh-mcp)

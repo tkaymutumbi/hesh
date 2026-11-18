@@ -28,10 +28,10 @@ Window {
     flags: Qt.Window | Qt.FramelessWindowHint
     transientParent: null
     color: Theme.window
-    width: 440
-    height: 580
-    minimumWidth: 380
-    minimumHeight: 480
+    width: Math.min(440, Screen.desktopAvailableWidth - 32)
+    height: Math.min(620, Screen.desktopAvailableHeight - 64)
+    minimumWidth: Math.min(380, Screen.desktopAvailableWidth - 32)
+    minimumHeight: Math.min(480, Screen.desktopAvailableHeight - 64)
 
     function hostOf(origin) { return String(origin).replace(/^https?:\/\//, "") }
 
@@ -45,9 +45,12 @@ Window {
         email.text = ""
         privateSwitch.checked = false
         var d = root.device
-        var url = d && d.url ? String(d.url) : ""
+        var url = Automation.pageUrl(root.deviceId) || (d && d.url ? String(d.url) : "")
         var m = url.match(/^(https:\/\/[^\/?#]+|http:\/\/(localhost|127\.0\.0\.1|[^\/?#:]+\.localhost)(:\d+)?)/)
         site.text = m ? m[0] : ""
+        for (var i = 0; i < root.savedAccounts.length; ++i) {
+            if (root.savedAccounts[i].origin === site.text) { root.select(i); break }
+        }
         root.show()
         root.raise()
         root.requestActivate()
@@ -62,6 +65,8 @@ Window {
         email.text = a.email
         password.text = ""
         privateSwitch.checked = !!a.private
+        emailSelector.text = ""
+        passwordSelector.text = ""
     }
 
     function send(command) {
@@ -80,7 +85,7 @@ Window {
             if (token !== root.pending) return
             root.pending = ""
             root.failed = !reply.ok
-            root.message = reply.ok ? (reply.filled ? "Filled. Review the page, then sign in." : "Saved.") : reply.error
+            root.message = reply.ok ? (reply.filled ? "Filled. Review the page, then continue sign-in." : "Saved.") : reply.error
             root.savedAccounts = Automation.accounts()
         }
     }
@@ -109,9 +114,19 @@ Window {
         border.color: Theme.border
     }
 
-    ColumnLayout {
+    ScrollView {
+        id: loginScroll
         anchors.fill: parent
-        anchors.margins: 22
+        contentWidth: availableWidth
+        contentHeight: loginContents.height + 44
+        clip: true
+
+    ColumnLayout {
+        id: loginContents
+        x: 22
+        y: 22
+        width: Math.max(1, loginScroll.availableWidth - 44)
+        height: implicitHeight
         spacing: 16
 
         // Header
@@ -131,10 +146,17 @@ Window {
             IconButton { iconText: "×"; tooltip: "Close"; onClicked: root.close() }
         }
 
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: Automation.loginMessage.length > 0 && Automation.paused
+            Text { Layout.fillWidth: true; text: Automation.loginMessage; color: Theme.text; font.pixelSize: 12; wrapMode: Text.WordWrap }
+            AppButton { text: "Resume AI"; compact: true; onClicked: { Automation.paused = false; root.close() } }
+        }
+
         // Accounts
         Rectangle {
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            Layout.preferredHeight: 120
             Layout.minimumHeight: 120
             radius: Theme.radiusMedium
             color: Theme.panel
@@ -265,7 +287,7 @@ Window {
                 text: "Save"
                 secondary: true
                 // Saving needs a password, or an existing account whose flag changes.
-                enabled: !root.pending && site.text.length > 0 && email.text.length > 0 && password.text.length > 0
+                enabled: !root.pending && site.text.length > 0 && email.text.length > 0 && (password.text.length > 0 || root.selected >= 0)
                 onClicked: root.send({action: "credential_save", origin: site.text, email: email.text,
                     password: password.text, "private": privateSwitch.checked})
             }
@@ -277,5 +299,6 @@ Window {
                 onClicked: { root.send({action: "credential_delete", origin: site.text, email: email.text}); root.selected = -1 }
             }
         }
+    }
     }
 }

@@ -54,6 +54,19 @@ Popup {
         return 0
     }
 
+    function selectPhoneProfile() {
+        if (!root.manager || kindCombo.currentIndex !== 1 || phoneCombo.currentIndex < 0) return
+        const phone = phoneCombo.phones[phoneCombo.currentIndex] || ""
+        const model = phone.split("|")[1] || ""
+        const profiles = root.manager.availableProfiles
+        for (let i = 0; i < profiles.length; ++i) {
+            if (profiles[i].name === model) {
+                profileCombo.currentIndex = i
+                return
+            }
+        }
+    }
+
     property bool manualPairing: false
     property string qrPath: ""
     property int qrStamp: 0
@@ -140,7 +153,10 @@ Popup {
                 model: ["Web page", "My phone (over adb)"]
                 font.pixelSize: 12
                 onCurrentIndexChanged: {
-                    if (currentIndex === 1 && root.opened) root.startQr()
+                    if (currentIndex === 1 && root.opened) {
+                        root.startQr()
+                        root.selectPhoneProfile()
+                    }
                     else if (root.manager) root.manager.cancelQrPairing()
                 }
             }
@@ -162,6 +178,7 @@ Popup {
                         model: phones.length > 0 ? phones.map(function(p) { return p.split("|")[1] + "  (" + p.split("|")[0] + ")" })
                                                  : ["No phone connected yet"]
                         font.pixelSize: 12
+                        onCurrentIndexChanged: root.selectPhoneProfile()
                     }
                     AppButton {
                         text: "Refresh"

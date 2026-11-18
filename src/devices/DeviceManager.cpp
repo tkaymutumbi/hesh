@@ -344,6 +344,18 @@ void DeviceManager::moveDevice(const QString& id, int targetIndex)
     persist();
 }
 
+bool DeviceManager::setDeviceProfile(const QString& id, const QString& profileName)
+{
+    auto* device = findById(id);
+    if (!device) return false;
+    for (const auto& profile : DeviceProfile::catalog()) {
+        if (profile.name != profileName) continue;
+        device->setProfile(profile);
+        return true;
+    }
+    return false;
+}
+
 void DeviceManager::setDeviceContentTheme(const QString& id, const QString& theme)
 {
     // Only "dark" and "system" survive normalization; the device emits
@@ -361,6 +373,7 @@ void DeviceManager::selectDevice(const QString& id)
 void DeviceManager::startDevice(const QString& id)
 {
     if (auto* device = findById(id)) {
+        if (device->isRunning()) return;
         device->start();
         persist();
     }

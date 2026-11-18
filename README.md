@@ -129,6 +129,33 @@ per-device actions:
 Dragging a sidebar card reorders the list; the drop line marks where the card
 will land, and the order is persisted with the device records.
 
+### Desktop browser devices and applications
+
+The **Desktop** profile uses Hesh's custom browser interface. **Open in Window**
+opens an independent window filled by the website. Right-click and choose
+**Browser options…** to open navigation, Applications, saved logins, and window
+controls in a separate window. Ctrl+L also opens that options window. Its viewport responds to resizing
+and its initial dimensions leave room for screen panels and browser controls.
+Each device has a persistent Qt WebEngine profile; cookies and website sessions
+stay specific to that device and survive closing Hesh.
+
+Use **Applications** in the Hesh titlebar or a web device's context menu to open
+its separate saved-site launcher. Save, edit, delete, and open website shortcuts.
+The applications list and saved-login vault are shared across web devices.
+
+The same MCP tools inspect and control desktop and mobile web previews. Sign-in
+popups share the originating device's profile; inspection targets the popup until
+it closes. Google sign-in, two-factor prompts, and recognized CAPTCHA challenges
+require you to finish authentication yourself, then choose **Resume AI**.
+Google may reject embedded-browser sign-in, and website verification checks can
+still occur. Hesh does not bypass these restrictions. Qt WebEngine itself uses
+the Chromium rendering engine, but the default Desktop interface is Hesh's own.
+
+An external Chromium/Chrome window is available only by explicitly setting
+`HESH_DESKTOP_BROWSER=chromium`. It uses separate storage under the device's
+`chromium/` directory; its cookies are not transferred into the custom browser.
+Existing profiles in both locations are retained when switching interfaces.
+
 ### Standalone windows
 
 **Open in Window** detaches a device into its own frameless window, sized to the
@@ -141,7 +168,7 @@ button.
 Right-click inside a standalone window for its own menu: **Reload**, **Back**,
 **Forward**, **Open in Browser**, **Main Window**, and **Close Window**.
 
-Window placement and open state are session-only: reopening Hesh does not
+Embedded window placement and open state are session-only: reopening Hesh does not
 restore standalone windows. Whether a device is *running*, however, does persist.
 
 ### Keyboard and window shortcuts

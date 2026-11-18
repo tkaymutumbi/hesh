@@ -91,6 +91,7 @@ public:
     Q_INVOKABLE void clearDeviceData(const QString& id);
     Q_INVOKABLE void clearAllDeviceData();
     Q_INVOKABLE void setDeviceAccent(const QString& id, const QString& accentName);
+    Q_INVOKABLE bool setDeviceProfile(const QString& id, const QString& profileName);
     Q_INVOKABLE void setDeviceContentTheme(const QString& id, const QString& theme);
     // Moves a device to an insertion boundary in the list: targetIndex counts
     // the boundaries between rows, so a value equal to the row count moves the

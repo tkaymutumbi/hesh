@@ -9,6 +9,7 @@
 
 namespace Hesh {
 class Device;
+class DesktopBrowsers;
 class Automation final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString activeDevice READ activeDevice NOTIFY activityChanged)
@@ -18,6 +19,8 @@ class Automation final : public QObject {
 public:
     explicit Automation(QObject* parent = nullptr);
     ~Automation() override;
+    void setDesktopBrowsers(DesktopBrowsers* browsers, std::function<bool(const QString&)> nativeForId);
+    bool nativeDevice(const QString& id) const { return m_nativeForId && m_nativeForId(id); }
     void setNameResolver(std::function<QString(const QString&)> resolver) { m_nameOf = std::move(resolver); }
     bool sessionActive() const { return m_session; }
     // Agent session lifecycle: start, done, pause, resume, status. The overlay
@@ -35,11 +38,18 @@ public:
     Q_INVOKABLE void noteConsole(const QString& id, int level, const QString& message, int line, const QString& source);
     Q_INVOKABLE void request(const QString& token, const QVariantMap& command);
     Q_INVOKABLE QVariantList accounts() const;
+    Q_PROPERTY(QVariantList savedSites READ savedSites NOTIFY sitesChanged)
+    QVariantList savedSites() const;
+    Q_INVOKABLE void openApplications(const QString& id);
+    QJsonObject site(const QString& id) const;
+    Q_PROPERTY(QString loginMessage READ loginMessage NOTIFY activityChanged)
+    QString loginMessage() const { return m_loginMessage; }
     // Files an agent staged for the next native file picker (one use).
     Q_INVOKABLE QStringList takeStagedFiles(const QString& id);
     Q_INVOKABLE void copyAgentPrompt(QObject* device, bool standalone);
     Q_INVOKABLE void copyDeviceId(const QString& id);
     Q_INVOKABLE void openLogins(const QString& id);
+    Q_INVOKABLE QString pageUrl(const QString& id) const;
     QString presentation(const QString& id) const;
     QJsonObject deviceContext(Device* device, const QString& host) const;
     QString agentPrompt(Device* device, const QString& host) const;
@@ -49,6 +59,9 @@ signals:
     void finished(const QString& token, const QJsonObject& reply);
     void activityChanged();
     void loginsRequested(const QString& id);
+    void applicationsRequested(const QString& id);
+    void sitesChanged();
+    void loginRequired(const QString& id);
 private:
     void finish(const QString& token, const QJsonObject& reply);
     void runPage(const QString& token, const QJsonObject& command);
@@ -57,11 +70,16 @@ private:
     QJsonObject readConsole(const QJsonObject& command);
     QString prepareUploads(const QString& id, QJsonObject& command);
     void vault(const QString& token, const QJsonObject& command);
+    void sites(const QString& token, const QJsonObject& command);
     bool saveState();
     void publish();
     void armSession(bool implicitStart);
     void endSession();
+    DesktopBrowsers* m_desktop = nullptr;
+    std::function<bool(const QString&)> m_nativeForId;
     QHash<QString, QPointer<QObject>> m_surfaces;
+    QHash<QString, QList<QPointer<QObject>>> m_surfaceStack;
+    QString m_loginMessage;
     QHash<QString, QString> m_pending;
     QSet<QString> m_busyDevices;
     QHash<QString, QStringList> m_staged;

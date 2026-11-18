@@ -89,6 +89,15 @@ Popup {
             color: Theme.border
         }
 
+        AppButton {
+            Layout.fillWidth: true
+            text: "Applications"
+            secondary: true
+            compact: true
+            visible: root.device && root.device.type === "web"
+            onClicked: { root.close(); Automation.openApplications(root.device.id) }
+        }
+
         // Per-device accent. Picking keeps the menu open so several presets can
         // be compared; the sidebar card and the preview state repaint live.
         ColumnLayout {
